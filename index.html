@@ -3,624 +3,658 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>OpenPiano — an open piano-learning app (research + prototype)</title>
-<meta name="description" content="OpenPiano: a community remake fusing Simple Piano (foxzi) and Simpli Piano (ConikerSystems). Research library, curriculum maps, and a playable Web Audio piano prototype.">
+<title>OpenPiano — learn piano, open source</title>
+<meta name="description" content="OpenPiano: an open, offline-first piano-learning app prototype. Courses, songs, lessons, falling-notes engine, Web Audio synth, mic grading (roadmap).">
+<meta name="theme-color" content="#12141a">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='24' font-size='24'%3E%F0%9F%8E%B9%3C/text%3E%3C/svg%3E">
 <style>
   :root {
-    --bg: #12141a; --panel: #1b1f2a; --panel2: #222736; --ink: #e8eaf2;
-    --muted: #9aa3b8; --accent: #7aa2ff; --accent2: #66d9c4; --warn: #ffcc66;
-    --soloist: #6fb3ff; --chords: #ff9ec4; --good: #7ad97a; --ok: #ffd166; --bad: #ff7a7a;
-    --radius: 12px; --max: 1080px;
+    --bg:#12141a; --panel:#1b1f2a; --panel2:#222736; --ink:#e8eaf2; --muted:#9aa3b8;
+    --accent:#7aa2ff; --accent2:#66d9c4; --soloist:#6fb3ff; --chords:#ff9ec4;
+    --good:#7ad97a; --ok:#ffd166; --bad:#ff7a7a; --radius:12px; --max:1080px;
   }
-  * { box-sizing: border-box; margin: 0; }
-  body {
-    background: var(--bg); color: var(--ink);
-    font: 16px/1.6 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--ink);
+    font:15px/1.55 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+  a { color:var(--accent); text-decoration:none; }
+  button { font:inherit; }
+  /* ---------- app shell ---------- */
+  header.app {
+    position:sticky; top:0; z-index:10; background:rgba(18,20,26,.92); backdrop-filter:blur(8px);
+    border-bottom:1px solid #2e3548; padding:10px 16px;
+    display:flex; align-items:center; gap:14px; flex-wrap:wrap;
   }
-  a { color: var(--accent); text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  header.hero {
-    padding: 64px 20px 40px; text-align: center;
-    background: radial-gradient(ellipse at 50% -20%, #2a3554 0%, var(--bg) 60%);
+  header.app .logo { font-weight:700; font-size:1.05rem; }
+  header.app nav { display:flex; gap:4px; flex-wrap:wrap; }
+  header.app nav button {
+    background:none; border:1px solid transparent; color:var(--muted);
+    border-radius:8px; padding:6px 12px; cursor:pointer;
   }
-  header.hero h1 { font-size: clamp(2rem, 6vw, 3.2rem); letter-spacing: -0.02em; }
-  header.hero p { color: var(--muted); max-width: 720px; margin: 12px auto 0; }
-  .pillrow { margin-top: 20px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
-  .pill {
-    background: var(--panel2); border: 1px solid #2e3548; border-radius: 999px;
-    padding: 6px 14px; font-size: 0.85rem; color: var(--muted);
-  }
-  .pill b { color: var(--ink); font-weight: 600; }
-  nav.toc {
-    display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;
-    margin: 26px auto 0; max-width: var(--max); padding: 0 16px;
-  }
-  nav.toc a {
-    background: var(--panel); border: 1px solid #2e3548; border-radius: 999px;
-    padding: 8px 16px; font-size: 0.9rem; color: var(--ink);
-  }
-  main { max-width: var(--max); margin: 0 auto; padding: 24px 16px 80px; }
-  section { margin-top: 56px; }
-  h2 { font-size: 1.6rem; margin-bottom: 6px; letter-spacing: -0.01em; }
-  h2 .tag { font-size: 0.75rem; vertical-align: middle; background: var(--panel2);
-    border: 1px solid #2e3548; color: var(--muted); border-radius: 6px; padding: 2px 8px; margin-left: 8px; }
-  .sub { color: var(--muted); margin-bottom: 20px; max-width: 820px; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+  header.app nav button.active { color:var(--ink); border-color:#2e3548; background:var(--panel); }
+  main { max-width:var(--max); margin:0 auto; padding:20px 16px 90px; }
+  h1 { font-size:1.5rem; margin:8px 0 2px; letter-spacing:-0.01em; }
+  .sub { color:var(--muted); margin-bottom:18px; font-size:.95rem; }
+  /* ---------- cards & grids ---------- */
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px; }
   .card {
-    background: var(--panel); border: 1px solid #2e3548; border-radius: var(--radius); padding: 18px;
+    background:var(--panel); border:1px solid #2e3548; border-radius:var(--radius);
+    padding:14px; cursor:pointer; transition:border-color .15s;
   }
-  .card h3 { font-size: 1.05rem; margin-bottom: 6px; }
-  .card p, .card li { color: var(--muted); font-size: 0.92rem; }
-  .card ul { padding-left: 18px; }
-  .card .k { color: var(--ink); font-weight: 600; }
-  table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
-  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #2e3548; }
-  th { color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
-  td.num { font-variant-numeric: tabular-nums; }
-  .scroll { overflow-x: auto; border: 1px solid #2e3548; border-radius: var(--radius); background: var(--panel); }
-  .inner { padding: 8px 4px; }
-  .tier { font-size: 0.72rem; border-radius: 5px; padding: 2px 7px; white-space: nowrap; }
-  .tier.beginner { background: #14351f; color: #8fe3a4; }
-  .tier.intermediate { background: #332a14; color: #ffd97a; }
-  .tier.chords-basics { background: #341b28; color: #ffa9c8; }
-  .tier.chords-prog { background: #2c1a3a; color: #c9a2ff; }
-  .pathmap { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  @media (max-width: 760px) { .pathmap { grid-template-columns: 1fr; } }
-  .path { border-radius: var(--radius); padding: 18px; border: 1px solid #2e3548; background: var(--panel); }
-  .path.soloist h3 { color: var(--soloist); }
-  .path.chords h3 { color: var(--chords); }
-  .path ol { padding-left: 20px; color: var(--muted); font-size: 0.92rem; }
-  .path li b { color: var(--ink); font-weight: 600; }
-  /* ---- piano ---- */
-  .piano-wrap { background: var(--panel); border: 1px solid #2e3548; border-radius: var(--radius); padding: 18px; }
-  .piano-controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
-  .piano-controls button, .piano-controls select {
-    background: var(--panel2); color: var(--ink); border: 1px solid #2e3548;
-    border-radius: 8px; padding: 8px 14px; font-size: 0.9rem; cursor: pointer;
+  .card:hover { border-color:var(--accent); }
+  .card h3 { font-size:.98rem; margin-bottom:3px; }
+  .card .meta { color:var(--muted); font-size:.8rem; }
+  .card.locked { opacity:.55; cursor:default; }
+  .card.locked:hover { border-color:#2e3548; }
+  .card .stars { color:#ffd166; letter-spacing:2px; font-size:.85rem; min-height:1em; display:block; }
+  .tier { font-size:.68rem; border-radius:5px; padding:2px 7px; display:inline-block; margin-bottom:6px; }
+  .tier.beginner{background:#14351f;color:#8fe3a4} .tier.intermediate{background:#332a14;color:#ffd97a}
+  .tier.chords-basics{background:#341b28;color:#ffa9c8} .tier.chords-prog{background:#2c1a3a;color:#c9a2ff}
+  .pathbadge { font-size:.68rem; border-radius:5px; padding:2px 7px; display:inline-block; margin-left:6px; }
+  .pathbadge.soloist{background:#14304f;color:#8fc3ff} .pathbadge.chords{background:#431b2c;color:#ffa9c8}
+  /* ---------- lesson view ---------- */
+  .back { background:none; border:1px solid #2e3548; color:var(--muted); border-radius:8px;
+          padding:6px 12px; cursor:pointer; margin-bottom:12px; }
+  .back:hover { color:var(--ink); border-color:var(--accent); }
+  .lessonhead { display:flex; gap:14px; align-items:baseline; flex-wrap:wrap; margin-bottom:12px; }
+  .lessonhead h1 { margin:0; }
+  /* ---------- falling lane ---------- */
+  .lane {
+    position:relative; height:300px; background:var(--panel);
+    border:1px solid #2e3548; border-radius:var(--radius); overflow:hidden; margin-bottom:8px;
   }
-  .piano-controls button:hover { border-color: var(--accent); }
-  .piano-controls button.active { border-color: var(--accent2); color: var(--accent2); }
-  .kb { position: relative; height: 190px; user-select: none; touch-action: none;
-        display: flex; border-radius: 8px; overflow: hidden; }
-  .wk { flex: 1; background: linear-gradient(#fff, #e8e8ee); border: 1px solid #b9b9c4;
-        border-radius: 0 0 6px 6px; position: relative; cursor: pointer; }
-  .wk .lbl { position: absolute; bottom: 8px; left: 0; right: 0; text-align: center;
-             color: #666; font-size: 0.72rem; pointer-events: none; }
-  .bk { position: absolute; top: 0; width: 6.4%; height: 62%; z-index: 2;
-        background: linear-gradient(#33343d, #101116); border: 1px solid #000;
-        border-radius: 0 0 5px 5px; cursor: pointer; }
-  .bk .lbl { position: absolute; bottom: 6px; left: 0; right: 0; text-align: center;
-             color: #9a9aa6; font-size: 0.62rem; pointer-events: none; }
-  .wk.down, .bk.down { filter: brightness(0.82); }
-  .wk.hl { background: linear-gradient(#d7e5ff, #b9d2ff); box-shadow: inset 0 0 0 2px var(--accent); }
-  .bk.hl { background: linear-gradient(#3a5a9a, #23375e); box-shadow: inset 0 0 0 2px var(--accent); }
-  .hint { color: var(--muted); font-size: 0.88rem; margin-top: 12px; }
-  .lessonbox { margin-top: 18px; border-top: 1px dashed #2e3548; padding-top: 14px; }
-  .lessonbox .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-  .lessonbox .target {
-    font-size: 1.15rem; background: var(--panel2); border: 1px solid #2e3548;
-    border-radius: 8px; padding: 6px 14px; min-width: 120px; text-align: center;
+  .lane .hitline { position:absolute; left:0; right:0; bottom:0; height:2px;
+    background:linear-gradient(90deg,transparent,var(--accent2),transparent); }
+  .block { position:absolute; border-radius:6px; display:flex; align-items:flex-end; justify-content:center;
+    font-size:.75rem; color:#10121a; font-weight:600; padding-bottom:2px; }
+  .block.chord { background:linear-gradient(#ffd977,#e8b53f); }
+  .block.pending { background:linear-gradient(#cfe0ff,#9dbdf5); }
+  .block.done-good { background:linear-gradient(#b7eeb7,#69c469); }
+  .block.done-ok { background:linear-gradient(#ffe4a3,#e5b84f); }
+  .block.missed { background:#4a4f5e; color:#9aa3b8; }
+  .block.bad-flash { background:var(--bad) !important; }
+  /* ---------- piano ---------- */
+  .kb { position:relative; height:170px; user-select:none; touch-action:none;
+        display:flex; border-radius:8px; overflow:hidden; }
+  .wk { flex:1; background:linear-gradient(#fff,#e8e8ee); border:1px solid #b9b9c4;
+        border-radius:0 0 6px 6px; position:relative; cursor:pointer; }
+  .wk .lbl,.bk .lbl { position:absolute; bottom:8px; left:0; right:0; text-align:center;
+        color:#666; font-size:.7rem; pointer-events:none; }
+  .bk .lbl { bottom:6px; color:#9a9aa6; font-size:.6rem; }
+  .bk { position:absolute; top:0; width:6.4%; height:62%; z-index:2;
+        background:linear-gradient(#33343d,#101116); border:1px solid #000;
+        border-radius:0 0 5px 5px; cursor:pointer; }
+  .wk.down { background:linear-gradient(#d7e5ff,#b9d2ff); }
+  .bk.down { background:linear-gradient(#3a5a9a,#23375e); }
+  .wk.hl,.bk.hl { box-shadow:inset 0 0 0 2.5px var(--accent); }
+  .wk.hl { background:linear-gradient(#cfe2ff,#a9c6ff); }
+  .bk.hl { background:linear-gradient(#3d5f9e,#27406e); }
+  /* ---------- lesson controls ---------- */
+  .controls { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:10px 0; }
+  .controls button, .controls select {
+    background:var(--panel2); color:var(--ink); border:1px solid #2e3548;
+    border-radius:8px; padding:8px 14px; cursor:pointer; font-size:.9rem;
   }
-  .lessonbox .target.done { border-color: var(--good); color: var(--good); }
-  .lessonbox .score { color: var(--muted); font-size: 0.9rem; }
-  .stars { color: #ffd166; letter-spacing: 2px; }
-  .foot { text-align: center; color: var(--muted); font-size: 0.85rem; margin-top: 80px; }
-  code { background: var(--panel2); border: 1px solid #2e3548; border-radius: 5px;
-         padding: 1px 6px; font-size: 0.85em; }
+  .controls button:hover { border-color:var(--accent); }
+  .controls button.primary { border-color:var(--accent2); color:var(--accent2); }
+  .progressbar { flex:1; min-width:160px; height:8px; background:var(--panel2);
+    border-radius:99px; overflow:hidden; }
+  .progressbar i { display:block; height:100%; width:0; background:var(--accent2); transition:width .2s; }
+  .finishbox {
+    background:var(--panel); border:1px solid #2e3548; border-radius:var(--radius);
+    padding:22px; text-align:center; margin-top:14px;
+  }
+  .finishbox .bigstars { font-size:2.2rem; letter-spacing:6px; color:#ffd166; }
+  .finishbox .stat { color:var(--muted); margin-top:4px; }
+  .finishbox .pass { color:var(--good); font-weight:600; margin-top:6px; }
+  .finishbox .fail { color:var(--warn,#ffcc66); font-weight:600; margin-top:6px; }
+  .finishbox button { margin-top:14px; }
+  .hidden { display:none !important; }
+  .lessonmeta { color:var(--muted); font-size:.85rem; }
+  footer { text-align:center; color:var(--muted); font-size:.8rem; padding:30px 0 50px; }
 </style>
 </head>
 <body>
 
-<header class="hero">
-  <h1>🎹 OpenPiano</h1>
-  <p>An open-source, offline-first piano-learning app — a community remake fusing
-     <b>Simple Piano</b> (foxzi's 48-topic curriculum) with <b>Simpli Piano</b>
-     (ConikerSystems' gamified loop &amp; mic grading). This page presents the
-     research and a playable prototype.</p>
-  <div class="pillrow">
-    <span class="pill"><b>32</b> lessons catalogued</span>
-    <span class="pill"><b>48</b> topics</span>
-    <span class="pill"><b>86</b> practices</span>
-    <span class="pill"><b>37</b> course units</span>
-    <span class="pill"><b>40</b> songs</span>
-    <span class="pill"><b>0</b> dollars</span>
-  </div>
-  <nav class="toc">
-    <a href="#sources">Sources</a><a href="#curriculum">Curriculum</a>
-    <a href="#paths">Course paths</a><a href="#songs">Song library</a>
-    <a href="#mechanics">Learning mechanics</a><a href="#commercial">Commercial</a>
-    <a href="#piano">🎹 Try it</a><a href="#plan">Plan</a>
+<header class="app">
+  <span class="logo">🎹 OpenPiano</span>
+  <nav>
+    <button data-view="home" class="active">Home</button>
+    <button data-view="course">Course</button>
+    <button data-view="songs">Songs</button>
+    <button data-view="free">Free Play</button>
   </nav>
 </header>
 
-<main>
+<main id="view"></main>
 
-<section id="sources">
-  <h2>Two open grandparents <span class="tag">research/README.md</span></h2>
-  <p class="sub">Everything below was extracted from the two reference repos' code,
-     docs and changelogs. Full details live in the local <code>research/</code> folder
-     (kept out of git on purpose).</p>
-  <div class="cards">
-    <div class="card">
-      <h3>Simple Piano <span style="font-weight:400;color:var(--muted)">(foxzi)</span></h3>
-      <p><span class="k">The curriculum skeleton.</span> Vue 3 + Vite. 32 lesson pages
-      covering a fixed 48-topic syllabus, 86 practices in 6 types (explore, set,
-      sequence, rhythm, chord, ear), staff rendering, interval-by-ear training,
-      RU/EN/ES, Web MIDI, additive synth, offline single-file build. Apache-2.0.</p>
-    </div>
-    <div class="card">
-      <h3>Simpli Piano <span style="font-weight:400;color:var(--muted)">(ConikerSystems)</span></h3>
-      <p><span class="k">The engagement loop.</span> Static PWA. Dual course paths with
-      an 80% pass gate, falling-notes engine (step + moving modes), star grading
-      (90/70/40), real-piano mic grading (ACF2+ autocorrelation, onset detection,
-      echo suppression), streaks, Daily Workout, 5-player profiles, anatomical
-      hands overlay.</p>
-    </div>
-    <div class="card">
-      <h3>Simply Piano <span style="font-weight:400;color:var(--muted)">(JoyTunes — commercial)</span></h3>
-      <p><span class="k">The pattern both copy.</span> Two paths (Soloist/Chords) +
-      Lead Sheet convergence, ~28 courses ≈ "2 years of piano", MusicSense™
-      on-device TensorFlow chord recognition, 5,000-song library, printable sheet
-      music. $150–170/yr, capped at early intermediate.</p>
-    </div>
-    <div class="card">
-      <h3>The fusion thesis</h3>
-      <p>Take foxzi's <span class="k">content depth</span> (theory, ear training, i18n,
-      fixed topic ladder) + Coniker's <span class="k">motivation layer</span> (paths,
-      stars, streaks, workout, mic). Keep both apps' zero-backend, no-samples,
-      offline-first ethos. Add what neither has: open contribution of lessons/songs.</p>
-    </div>
-  </div>
-</section>
+<footer>OpenPiano prototype · course engine + falling notes + good/ok grading + 80% pass gate ·
+  <a href="https://github.com/itpick/openpiano">github.com/itpick/openpiano</a></footer>
 
-<section id="curriculum">
-  <h2>foxzi's 48-topic ladder <span class="tag">data/foxzi-lessons.json</span></h2>
-  <p class="sub">Six modules; topic order is fixed (it's the pedagogy). Closely related
-     topics merge into shared lessons — e.g. "C major scale RH+LH+both" is topics
-     19–21 in one lesson with 3 practices.</p>
-  <div class="scroll"><div class="inner">
-  <table id="module-table">
-    <thead><tr><th>#</th><th>Topic</th><th>Module</th><th>Lesson</th></tr></thead>
-    <tbody></tbody>
-  </table>
-  </div></div>
-</section>
-
-<section id="paths">
-  <h2>Coniker's two course paths <span class="tag">data/course-units.json</span></h2>
-  <p class="sub">Units unlock in order; <b>80% accuracy to complete</b> and unlock the
-     next. Stars: 3★ ≥90% · 2★ ≥70% · 1★ ≥40%. Advanced tiers are "coming soon" in
-     both sources — an open contribution opportunity.</p>
-  <div class="pathmap">
-    <div class="path soloist">
-      <h3>🩵 Soloist path — melodies &amp; reading</h3>
-      <ol id="soloist-list"></ol>
-    </div>
-    <div class="path chords">
-      <h3>🩷 Chords path — accompanying &amp; styles</h3>
-      <ol id="chords-list"></ol>
-    </div>
-  </div>
-</section>
-
-<section id="songs">
-  <h2>Coniker's song library <span class="tag">data/songs.json</span></h2>
-  <p class="sub">40 public-domain songs (plus 2 short by-ear pop excerpts) in a compact
-     text notation. Difficulty: 1 = five-finger beginner · 2 = ~one octave ·
-     3 = wider range/accidentals. The remake inherits this notation for community
-     song contributions.</p>
-  <div class="scroll"><div class="inner">
-  <table id="songs-table">
-    <thead><tr><th>id</th><th>Title</th><th>Diff</th><th>BPM</th><th>Genre</th></tr></thead>
-    <tbody></tbody>
-  </table>
-  </div></div>
-</section>
-
-<section id="mechanics">
-  <h2>Learning mechanics worth copying <span class="tag">research/*/ARCHITECTURE.md</span></h2>
-  <div class="cards">
-    <div class="card"><h3>Teaching loop</h3>
-      <p>Show (falling notes + lit keys) → play (touch/keys/mic/MIDI) → grade
-      (good/ok/bad) → advance. <span class="k">step</span> waits for the right note;
-      <span class="k">moving</span> scrolls at tempo (±0.4-beat window, 4-beat
-      count-in, metronome). A note hit after a wrong attempt caps at "ok".</p></div>
-    <div class="card"><h3>Mic grading (the hard part)</h3>
-      <p>Monophonic ACF2+ autocorrelation; rising-edge onset detection so repeated
-      notes register; adaptive noise gate; echo suppression (ignore the app's own
-      speaker for 1.2 s); unmatched mic notes are ignored, never penalized.
-      Commercial Simply adds chords via MusicSense™ (on-device TensorFlow) —
-      our open differentiator to chase.</p></div>
-    <div class="card"><h3>Practice taxonomy (foxzi)</h3>
-      <p><code>explore</code> press N keys · <code>set</code> any order ·
-      <code>sequence</code> ordered · <code>rhythm</code> on metronome clicks
-      (±0.35 beat) · <code>chord</code> together (≤1.2 s window) ·
-      <code>ear</code> interval by ear. Repeats: 1/2/3/∞.</p></div>
-    <div class="card"><h3>Motivation layer (Coniker)</h3>
-      <p>🔥 daily streak (≥60 s, local calendar day — never UTC), Daily Workout
-      builder (5/10/15 min: reading warm-up → current song → chord drill →
-      optional test), 5 local profiles, per-player namespaced localStorage.</p></div>
-    <div class="card"><h3>UX rules paid for in user feedback</h3>
-      <p>Hands overlay default-OFF · step mode auto-starts on first note · one
-      sound at a time · keys capped at real-piano width (23.5 mm) · every row
-      labels the hand · iPad Safari needs the aggressive SW update dance.</p></div>
-    <div class="card"><h3>Simply Piano's structure (from their own blog)</h3>
-      <p>The app = <span class="k">"menus"</span> (native UI: onboarding, course map,
-      library, sheet music) + <span class="k">"in-game"</span> (music levels: static
-      note sequences or moving songs). Lesson = recap → sub-lessons of 8–12
-      exercises → play-along song. Linear unlock; free replay of unlocked
-      lessons.</p></div>
-  </div>
-</section>
-
-<section id="commercial">
-  <h2>Commercial benchmark <span class="tag">website/SIMPLY-PIANO-COMMERCIAL.md</span></h2>
-  <p class="sub">Simply Piano (JoyTunes/Simply): ~28 courses ≈ 2 years, 5,000+ songs,
-     $150–170/yr with a trial-to-annual auto-renew trap, ceiling ≈ early intermediate,
-     no technique feedback, weak theory. Our open pitch: same engagement, real theory
-     depth (foxzi), desktop+mobile, MIDI <i>and</i> mic, no paywall, community content
-     past the intermediate ceiling.</p>
-  <div class="scroll"><div class="inner">
-  <table>
-    <thead><tr><th>Capability</th><th>Simply Piano</th><th>simpli-piano</th><th>simplepiano</th><th>OpenPiano plan</th></tr></thead>
-    <tbody>
-      <tr><td>Mic grading</td><td>✅ DL chords+melody</td><td>✅ mono</td><td>—</td><td>✅ mono → chords later</td></tr>
-      <tr><td>MIDI input</td><td>✅ (mobile only)</td><td>—</td><td>✅</td><td>✅</td></tr>
-      <tr><td>Theory depth</td><td>weak</td><td>light</td><td><b>strong</b></td><td><b>strong</b></td></tr>
-      <tr><td>Gamified paths</td><td>✅ 2 paths</td><td>✅ 2 paths</td><td>modules</td><td>✅ 2 paths</td></tr>
-      <tr><td>Streaks/workout</td><td>✅</td><td>✅</td><td>—</td><td>✅</td></tr>
-      <tr><td>Offline</td><td>—</td><td>✅ PWA</td><td>✅ single-file</td><td>✅ PWA</td></tr>
-      <tr><td>Cost</td><td>$150–170/yr</td><td>free</td><td>free</td><td>free</td></tr>
-      <tr><td>Ceiling</td><td>early intermediate</td><td>intermediate</td><td>advanced theory</td><td>community-extended</td></tr>
-    </tbody>
-  </table>
-  </div></div>
-</section>
-
-<section id="piano">
-  <h2>🎹 Try the prototype <span class="tag">Web Audio, no samples</span></h2>
-  <p class="sub">A proof-of-concept: two-detuned-oscillator synth (the Coniker audio
-     recipe), device-adaptive keyboard, pointer + computer-keyboard input
-     (A W S E D F T G Y H U J K), and a tiny foxzi-style lesson —
-     <b>sequence practice</b> on <b>Hot Cross Buns</b> with the good/ok grading rule.</p>
-  <div class="piano-wrap">
-    <div class="piano-controls">
-      <button id="btn-lesson" class="active">📖 Lesson: Hot Cross Buns</button>
-      <button id="btn-free">🎵 Free play</button>
-      <button id="btn-listen">🔊 Listen</button>
-      <button id="btn-restart" hidden>↻ Restart</button>
-      <select id="octave" title="Octave shift">
-        <option value="-12">Octave −1</option>
-        <option value="0" selected>Octave 0</option>
-        <option value="12">Octave +1</option>
-      </select>
-    </div>
-    <div class="kb" id="kb"></div>
-    <div class="lessonbox" id="lessonbox">
-      <div class="row">
-        <span class="target" id="target">Press ▶ to start</span>
-        <span class="score" id="score">Step mode — play the lit key (mic grading arrives later; it needs HTTPS + user gesture anyway)</span>
-        <button id="btn-start" class="piano-controls" style="background:var(--panel2);color:var(--ink);border:1px solid #2e3548;border-radius:8px;padding:8px 16px;cursor:pointer;">▶ Start</button>
-        <span class="stars" id="stars"></span>
-      </div>
-    </div>
-    <p class="hint" id="hint">Hot Cross Buns: E D C · E D C · C C C C · D D D D · E D C.</p>
-  </div>
-</section>
-
-<section id="plan">
-  <h2>Plan</h2>
-  <div class="cards">
-    <div class="card"><h3>1 · Research ✅</h3><p>Both apps + commercial benchmark
-      catalogued in <code>research/</code> (local only).</p></div>
-    <div class="card"><h3>2 · Synthesis</h3><p>Unified curriculum spec: foxzi's 48-topic
-      ladder mapped onto Coniker's dual-path progression; song notation adopted for
-      community contributions.</p></div>
-    <div class="card"><h3>3 · Stack</h3><p>Static PWA, hash routing, Web Audio synth,
-      localStorage profiles, optional mic (secure context) + Web MIDI. No backend,
-      no account, no samples.</p></div>
-    <div class="card"><h3>4 · Build</h3><p>Engine → keyboard → course paths →
-      trainer → songs → mic → stats → workout → PWA shell.</p></div>
-  </div>
-</section>
-
-<p class="foot">OpenPiano · research-compiled 2026-10-05 ·
-  sources: <a href="https://github.com/foxzi/simplepiano">foxzi/simplepiano</a> ·
-  <a href="https://github.com/ConikerSystems/simpli-piano">ConikerSystems/simpli-piano</a> ·
-  <a href="https://piano-help.hellosimply.com">Simply Piano help center</a></p>
-
-</main>
-
+<script src="app/data.js"></script>
 <script>
-/* ---------------- data (inlined from research/data/*.json) ---------------- */
-const TOPICS = ["Getting to know the keyboard","Finding the note C","Names of the white keys","Octaves","Finger numbers","Five notes with the right hand","Five notes with the left hand","Simple note sequences","Rhythm basics","Playing with a metronome","Quarter, half, and whole notes","Eighth notes and rests","Introduction to the musical staff","Treble clef","Reading notes with the right hand","Bass clef","Reading notes with the left hand","Simple melodies from notation","C major scale — right hand","C major scale — left hand","C major scale — both hands","Sharps and flats","G major scale","F major scale","D major scale","The remaining major scales","Whole tone and semitone","Intervals","Intervals by ear","Major triads","Minor triads","Chord inversions","Chords C, F, and G","The I–IV–V–I progression","Melody RH + bass LH","Melody RH + chords LH","Playing with both hands","Simple pieces","Sight reading","Playing without hints","Playing at a set tempo","Gradually increasing BPM","Minor scales","Arpeggios","More complex rhythms","Dynamics and musical expression","The pedal","Final beginner-level pieces"];
-const MODULES = {basics:"1 · First steps",reading:"2 · Rhythm & notes",scales:"3 · Scales & keys",harmony:"4 · Intervals & chords",hands:"5 · Two hands & repertoire",mastery:"6 · Going deeper"};
-const FOXZI = [
- ["keyboard-tour","basics",[1]],["white-keys","basics",[2,3]],["octaves","basics",[4]],
- ["finger-numbers","basics",[5]],["five-notes","basics",[6,7]],["sequences","basics",[8]],
- ["rhythm-basics","basics",[9,10]],["note-lengths","reading",[11]],["eighths-rests","reading",[12]],
- ["staff-treble","reading",[13,14]],["read-rh","reading",[15]],["bass-clef","reading",[16,17]],
- ["melodies-notation","reading",[18]],["c-scale","scales",[19,20,21]],["accidentals","scales",[22]],
- ["g-f-major","scales",[23,24]],["d-more-major","scales",[25,26]],["intervals","harmony",[27,28]],
- ["intervals-ear","harmony",[29]],["triads","harmony",[30,31]],["inversions","harmony",[32]],
- ["cfg-progression","harmony",[33,34]],["melody-bass","hands",[35,36]],["both-hands","hands",[37,38]],
- ["sight-reading","hands",[39,40]],["tempo","hands",[41,42]],["minor-scales","mastery",[43]],
- ["arpeggios","mastery",[44]],["complex-rhythm","mastery",[45]],["dynamics","mastery",[46]],
- ["pedal","mastery",[47]],["final-pieces","mastery",[48]]
-];
-const UNITS = [
- ["u1","beginner","keyfind","Meet the Keys"],["u2","beginner","keyfind","Find F and G"],
- ["u3","beginner","keyfind","C-D-E-F-G"],["u4","beginner","trainer","Reading C–E"],
- ["u5","beginner","trainer","Reading C–G"],["u6","beginner","song","Hot Cross Buns"],
- ["u7","beginner","song","Au Clair de la Lune"],["u8","beginner","song","Hot Cross Buns — in time"],
- ["u9","beginner","song","Mary Had a Little Lamb"],["u10","beginner","song","Old MacDonald"],
- ["u11","beginner","trainer","Reading A–C"],["u12","beginner","song","London Bridge"],
- ["u13","beginner","song","Frère Jacques"],["u14","beginner","song","Twinkle Twinkle"],
- ["u15","beginner","song","Ode to Joy"],["u16","beginner","song","When the Saints"],
- ["u17","beginner","song","Lightly Row — in time"],["u18","beginner","song","Jingle Bells"],
- ["i1","intermediate","trainer","Read the Bass Clef"],["i2","intermediate","song","Left-Hand Warm-Up"],
- ["i3","intermediate","song","The C Major Scale"],["i4","intermediate","song","Hands Together"],
- ["i5","intermediate","song","First Chords: C F G"],["i6","intermediate","trainer","Bass Clef Around Middle C"],
- ["i7","intermediate","song","Ode to Joy — in time"],["i8","intermediate","song","Twinkle — in time"],
- ["c1","chords-basics","song","The C Chord"],["c2","chords-basics","song","The G Chord"],
- ["c3","chords-basics","song","The F Chord"],["c4","chords-basics","song","Switch C ↔ G"],
- ["c5","chords-basics","song","Switch C ↔ F"],["c6","chords-basics","song","Minor Chords: Am & Em"],
- ["c7","chords-prog","song","C – F – G"],["c8","chords-prog","song","The 4-Chord Song"],
- ["c9","chords-prog","song","4 Chords — in time"],["c10","chords-prog","song","The '50s Progression"],
- ["c11","chords-prog","song","'50s — in time"]
-];
-const SONGS = [
- ["hot-cross-buns","Hot Cross Buns",1,80,"kids"],["mary-lamb","Mary Had a Little Lamb",1,90,"kids"],
- ["au-clair","Au Clair de la Lune",1,90,"folk"],["old-macdonald","Old MacDonald",1,100,"kids"],
- ["london-bridge","London Bridge",1,90,"kids"],["frere-jacques","Frère Jacques",1,90,"folk"],
- ["twinkle","Twinkle Twinkle",1,100,"kids"],["lightly-row","Lightly Row",1,90,"folk"],
- ["when-the-saints","When the Saints",1,95,"hymn"],["jingle-bells","Jingle Bells",1,110,"holiday"],
- ["ode-to-joy","Ode to Joy",2,100,"classical"],["c-scale","C Major Scale",2,80,"classical"],
- ["lh-warmup","Left-Hand Warm-Up",2,80,"classical"],["hands-together","Hands Together",3,70,"classical"],
- ["triads-cfg","Triads C F G",2,80,"classical"],["chord-c","The C Chord",1,70,"classical"],
- ["chord-g","The G Chord",1,70,"classical"],["chord-f","The F Chord",1,70,"classical"],
- ["switch-cg","Switch C ↔ G",2,80,"classical"],["switch-cf","Switch C ↔ F",2,80,"classical"],
- ["minor-chords","Am & Em",2,80,"classical"],["prog-145","C–F–G",2,90,"classical"],
- ["prog-4chord","The 4-Chord Song",2,100,"pop"],["prog-50s","'50s Progression",2,100,"pop"],
- ["clocks-riff","Clocks (riff)",3,130,"pop"],["country-roads","Country Roads (chorus)",3,110,"pop"]
-];
+(() => {
+"use strict";
+const DATA = window.OPENPIANO_DATA;
+const SONGS = DATA.songs, UNITS = DATA.units;
+const NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const view = document.getElementById("view");
 
-/* ---------------- fill tables ---------------- */
-(function(){
-  // topic table: map topic -> lesson id
-  const topicLesson = {};
-  FOXZI.forEach(([id,mod,topics]) => topics.forEach(t => topicLesson[t]={id,mod}));
-  const tbody = document.querySelector("#module-table tbody");
-  TOPICS.forEach((t,i)=>{
-    const L = topicLesson[i+1]||{id:"—",mod:"—"};
-    const tr=document.createElement("tr");
-    tr.innerHTML=`<td class="num">${i+1}</td><td>${t}</td><td>${MODULES[L.mod]||L.mod}</td><td><code>${L.id}</code></td>`;
-    tbody.append(tr);
-  });
-  const solo=document.getElementById("soloist-list"), ch=document.getElementById("chords-list");
-  UNITS.forEach(([id,tier,type,title])=>{
-    const li=document.createElement("li");
-    li.innerHTML=`<b>${title}</b> <span style="font-size:.78rem">(${type})</span>`;
-    (tier.startsWith("chords")?ch:solo).append(li);
-  });
-  const st=document.querySelector("#songs-table tbody");
-  SONGS.forEach(([id,title,d,bpm,g])=>{
-    const tr=document.createElement("tr");
-    tr.innerHTML=`<td><code>${id}</code></td><td>${title}</td><td class="num">${d}</td><td class="num">${bpm}</td><td>${g}</td>`;
-    st.append(tr);
-  });
-})();
+/* ================= state (localStorage, single player) ================= */
+const store = {
+  get(k,d){ try{ const v=localStorage.getItem("openpiano."+k); return v==null?d:JSON.parse(v);}catch(e){return d;} },
+  set(k,v){ localStorage.setItem("openpiano."+k, JSON.stringify(v)); }
+};
+const prog = store.get("course", {}); // {unitId: {stars, complete}}
+const songProg = store.get("songs", {}); // {songId: {stars, bestAccuracy}}
+const saveProg = () => { store.set("course", prog); store.set("songs", songProg); };
 
-/* ---------------- piano prototype ---------------- */
-(function(){
-  const NAMES=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
-  const NAME_LC={0:"C",2:"D",4:"E",5:"F",7:"G",9:"A",11:"B"};
-  const name=m=>NAMES[m%12]+(Math.floor(m/12)-1);
-  const WHITE=m=>NAME_LC[((m%12)+12)%12]!==undefined;
+/* ================= course helpers (course.js semantics) ================= */
+const PASS = 0.8;
+const tierName = {beginner:"Beginner", intermediate:"Intermediate", "chords-basics":"Chord Basics", "chords-prog":"Progressions"};
+const unitComplete = id => !!(prog[id] && prog[id].complete);
+const unitUnlocked = i => i<=0 || unitComplete(UNITS[i-1].id);
+const nextUnitIndex = () => { for(let i=0;i<UNITS.length;i++) if(unitUnlocked(i)&&!unitComplete(UNITS[i].id)) return i; return -1; };
+const songOf = id => SONGS.find(s=>s.id===id);
+const starRow = n => "★★★".slice(0,n)+"☆☆☆".slice(0,3-n);
 
-  let ctx=null, master=null; const voices=new Map();
-  function ensureCtx(){ if(!ctx){ ctx=new (window.AudioContext||window.webkitAudioContext)();
-    master=ctx.createGain(); master.gain.value=0.35; master.connect(ctx.destination);} 
-    if(ctx.state==="suspended") ctx.resume(); }
-  function noteOn(m){ ensureCtx(); if(voices.has(m)) return;
-    const t=ctx.currentTime, f=440*Math.pow(2,(m-69)/12);
-    const o1=ctx.createOscillator(), o2=ctx.createOscillator(), g=ctx.createGain();
-    o1.type="triangle"; o2.type="triangle"; o1.frequency.value=f; o2.frequency.value=f*1.003;
-    g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.5,t+0.01);
-    g.gain.exponentialRampToValueAtTime(0.0001,t+1.6);
-    o1.connect(g); o2.connect(g); g.connect(master); o1.start(t); o2.start(t);
-    voices.set(m,{o1,o2,g});
-    const el=keyEl(m); if(el){ el.classList.add("down"); } }
-  function noteOff(m){ const v=voices.get(m); if(!v) return; const t=ctx.currentTime;
-    v.g.gain.cancelScheduledValues(t); v.g.gain.setTargetAtTime(0.0001,t,0.08);
-    setTimeout(()=>{try{v.o1.stop();v.o2.stop();}catch(e){}},400);
-    voices.delete(m); const el=keyEl(m); if(el) el.classList.remove("down"); }
-
-  // keyboard: C4..E5 rendered, octave shift transposes
-  let shift=0;
-  const kb=document.getElementById("kb");
-  const keyEls={};
-  function keyEl(m){ return keyEls[m-shift]; }
-
-  function build(){
-    kb.innerHTML=""; for(const k in keyEls) delete keyEls[k];
-    const start=60+shift, end=start+16; // C..E (16 semitones = 10 white keys)
-    const whites=[], blacks=[];
-    for(let m=start;m<=end;m++){ (WHITE(m)?whites:blacks).push(m); }
-    // white keys as flex children
-    whites.forEach(m=>{
-      const el=document.createElement("div");
-      el.className="wk"; el.dataset.midi=m;
-      el.innerHTML=`<span class="lbl">${NAMES[m%12]}</span>`;
-      kb.append(el); keyEls[m-start]=el;
-    });
-    // black keys absolutely positioned between whites
-    const wW=100/whites.length;
-    blacks.forEach(m=>{
-      // black key sits at the boundary between its left and right white neighbors
-      const leftWhiteCount=whites.filter(w=>w<m).length; // whites left of it
-      const el=document.createElement("div");
-      el.className="bk"; el.dataset.midi=m;
-      el.style.left=(leftWhiteCount*wW - wW*0.032)+"%";
-      el.innerHTML=`<span class="lbl">${NAMES[m%12]}</span>`;
-      kb.append(el); keyEls[m-start]=el;
-    });
-  }
-  build();
-
-  // pointer input with glissando (pointerdown → slide)
-  let pointerDown=false;
-  let activePointers=new Map(); // pointerId -> midi
-  function midiFromEvent(e){
-    const el=document.elementFromPoint(e.clientX,e.clientY);
-    return el&&el.dataset&&el.dataset.midi?+el.dataset.midi:null;
-  }
-  kb.addEventListener("pointerdown",e=>{
-    pointerDown=true; kb.setPointerCapture(e.pointerId);
-    const m=midiFromEvent(e); if(m!=null){ activePointers.set(e.pointerId,m); noteOn(m); }
-  });
-  kb.addEventListener("pointermove",e=>{
-    if(!pointerDown) return;
-    const prev=activePointers.get(e.pointerId);
-    const m=midiFromEvent(e);
-    if(m!==prev){
-      if(prev!=null) noteOff(prev);
-      if(m!=null){ activePointers.set(e.pointerId,m); noteOn(m); }
-      else activePointers.delete(e.pointerId);
-    }
-  });
-  const releasePointer=e=>{
-    const prev=activePointers.get(e.pointerId);
-    if(prev!=null) noteOff(prev);
-    activePointers.delete(e.pointerId);
-    if(activePointers.size===0) pointerDown=false;
+/* ================= audio (two detuned oscillators + ADSR) ================= */
+let actx=null, master=null; const voices=new Map();
+function ensureCtx(){
+  if(!actx){ actx=new (window.AudioContext||window.webkitAudioContext)();
+    master=actx.createGain(); master.gain.value=0.32; master.connect(actx.destination); }
+  if(actx.state==="suspended") actx.resume();
+}
+function midiFreq(m){ return 440*Math.pow(2,(m-69)/12); }
+function synthNote(midi, durBeats=1, bpm=90){
+  ensureCtx();
+  const t=actx.currentTime, f=midiFreq(midi), secs=Math.max(0.25, durBeats*60/bpm);
+  const o1=actx.createOscillator(), o2=actx.createOscillator(), g=actx.createGain();
+  o1.type="triangle"; o2.type="triangle";
+  o1.frequency.value=f; o2.frequency.value=f*1.003;
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.exponentialRampToValueAtTime(0.5,t+0.012);
+  g.gain.setValueAtTime(0.4,t+secs*0.6);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+secs+0.35);
+  o1.connect(g); o2.connect(g); g.connect(master);
+  o1.start(t); o2.start(t);
+  o1.stop(t+secs+0.4); o2.stop(t+secs+0.4);
+}
+let metroTimer=null;
+function metronome(bpm, beats, onTick, onDone){
+  ensureCtx();
+  const msPerBeat=60000/bpm;
+  // click via short noise-ish osc
+  let beat=0;
+  const tick=()=>{
+    const t=actx.currentTime, o=actx.createOscillator(), g=actx.createGain();
+    o.type="square"; o.frequency.value= beat%4===0?1568:1046;
+    g.gain.setValueAtTime(0.08,t); g.gain.exponentialRampToValueAtTime(0.0001,t+0.05);
+    o.connect(g); g.connect(master); o.start(t); o.stop(t+0.06);
+    if(onTick) onTick(beat);
+    beat++;
+    if(beat>=beats){ stopMetro(); if(onDone) onDone(); }
   };
-  kb.addEventListener("pointerup",releasePointer);
-  kb.addEventListener("pointercancel",releasePointer);
+  tick();
+  metroTimer=setInterval(tick, msPerBeat);
+}
+function stopMetro(){ if(metroTimer){ clearInterval(metroTimer); metroTimer=null; } }
 
-  // computer keyboard: A W S E D F T G Y H U J K O L P ; — classic mapping
+/* ================= keyboard ================= */
+const WHITE=m=>![1,3,6,8,10].includes(((m%12)+12)%12);
+let kbShift=0;
+const keyEls={};
+function buildKB(kbEl, lo, hi){
+  kbEl.innerHTML=""; for(const k in keyEls) delete keyEls[k];
+  const whites=[], blacks=[];
+  for(let m=lo;m<=hi;m++) (WHITE(m)?whites:blacks).push(m);
+  whites.forEach(m=>{
+    const el=document.createElement("div"); el.className="wk"; el.dataset.midi=m;
+    el.innerHTML=`<span class="lbl">${NAMES[m%12]}</span>`;
+    kbEl.append(el); keyEls[m]=el;
+  });
+  const wW=100/whites.length;
+  blacks.forEach(m=>{
+    const left=whites.filter(w=>w<m).length;
+    const el=document.createElement("div"); el.className="bk"; el.dataset.midi=m;
+    el.style.left=(left*wW - wW*0.032)+"%";
+    el.innerHTML=`<span class="lbl">${NAMES[m%12]}</span>`;
+    kbEl.append(el); keyEls[m]=el;
+  });
+}
+function keyEl(m){ return keyEls[m]; }
+function hlKey(m,on){ const el=keyEls[m]; if(el) el.classList.toggle("hl",!!on); }
+function clearHl(){ document.querySelectorAll(".hl").forEach(el=>el.classList.remove("hl")); }
+
+/* pointer + computer keyboard input */
+function wireKB(kbEl, onInput){
+  let down=false; const active=new Map();
+  const midiAt=e=>{ const el=document.elementFromPoint(e.clientX,e.clientY);
+    return el&&el.dataset&&el.dataset.midi?+el.dataset.midi:null; };
+  kbEl.addEventListener("pointerdown",e=>{ down=true; kbEl.setPointerCapture(e.pointerId);
+    const m=midiAt(e); if(m!=null){ active.set(e.pointerId,m); press(m);} });
+  kbEl.addEventListener("pointermove",e=>{ if(!down) return;
+    const prev=active.get(e.pointerId), m=midiAt(e);
+    if(m!==prev){ if(prev!=null) release(prev);
+      if(m!=null){ active.set(e.pointerId,m); press(m);} else active.delete(e.pointerId); } });
+  const up=e=>{ const prev=active.get(e.pointerId); if(prev!=null) release(prev);
+    active.delete(e.pointerId); if(!active.size) down=false; };
+  kbEl.addEventListener("pointerup",up); kbEl.addEventListener("pointercancel",up);
+
   const KEYMAP={a:0,w:1,s:2,e:3,d:4,f:5,t:6,g:7,y:8,h:9,u:10,j:11,k:12,o:13,l:14,p:15,";":16};
   const held=new Set();
-  window.addEventListener("keydown",e=>{
-    if(e.repeat||e.target.tagName==="SELECT") return;
+  const kd=e=>{ if(e.repeat||e.target.tagName==="SELECT"||e.target.tagName==="INPUT") return;
     const off=KEYMAP[e.key.toLowerCase()]; if(off==null) return;
-    const m=60+shift+off; if(m<21||m>108) return;
-    if(held.has(m)) return; held.add(m); noteOn(m);
-  });
-  window.addEventListener("keyup",e=>{
-    const off=KEYMAP[e.key.toLowerCase()]; if(off==null) return;
-    const m=60+shift+off; if(held.has(m)){ held.delete(m); noteOff(m); }
-  });
+    const m=kbLo()+off; if(held.has(m)) return; held.add(m); press(m); };
+  const ku=e=>{ const off=KEYMAP[e.key.toLowerCase()]; if(off==null) return;
+    const m=kbLo()+off; if(held.has(m)){ held.delete(m); release(m);} };
+  let kbLoFn=()=>60;
+  function kbLo(){ return kbLoFn(); }
+  window.addEventListener("keydown",kd); window.addEventListener("keyup",ku);
+  function press(m){ visual(m,true); onInput&&onInput(m,true); }
+  function release(m){ visual(m,false); onInput&&onInput(m,false); }
+  function visual(m,downv){ synthNotePress(m,downv); }
+  return { setLo:(fn)=>{ kbLoFn=fn; }, cleanup(){ window.removeEventListener("keydown",kd); window.removeEventListener("keyup",ku); } };
+}
 
-  document.getElementById("octave").addEventListener("change",e=>{
-    // release everything first
-    held.forEach(m=>noteOff(m)); held.clear();
-    activePointers.forEach(m=>noteOff(m)); activePointers.clear();
-    shift=+e.target.value; build();
-  });
-
-  /* ---------------- lesson: Hot Cross Buns (step mode) ---------------- */
-  // foxzi-style sequence practice + Coniker's good/ok rule + stars
-  const SONG=[64,62,60, 64,62,60, 60,60,60,60, 62,62,62,62, 64,62,60];
-  const labels={64:"E",62:"D",60:"C"};
-  let cursor=-1, mistake=false, good=0, ok=0, running=false;
-  const target=document.getElementById("target"), scoreEl=document.getElementById("score"),
-        starsEl=document.getElementById("stars"), hint=document.getElementById("hint"),
-        btnStart=document.getElementById("btn-start"), btnListen=document.getElementById("btn-listen"),
-        btnRestart=document.getElementById("btn-restart"), btnLesson=document.getElementById("btn-lesson"),
-        btnFree=document.getElementById("btn-free");
-
-  function resetLesson(){
-    cursor=-1; mistake=false; good=0; ok=0; running=false;
-    target.textContent="Press ▶ to start"; target.classList.remove("done");
-    scoreEl.textContent="Step mode — play the lit key";
-    starsEl.textContent=""; btnRestart.hidden=true;
-    highlightNext();
+/* live synth tied to key visuals (sustains while held) */
+const liveVoices=new Map();
+function synthNotePress(m,down){
+  ensureCtx();
+  if(down){
+    if(liveVoices.has(m)) return;
+    const t=actx.currentTime, f=midiFreq(m);
+    const o1=actx.createOscillator(), o2=actx.createOscillator(), g=actx.createGain();
+    o1.type="triangle"; o2.type="triangle";
+    o1.frequency.value=f; o2.frequency.value=f*1.003;
+    g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.45,t+0.012);
+    o1.connect(g); o2.connect(g); g.connect(master);
+    o1.start(t); o2.start(t);
+    liveVoices.set(m,{o1,o2,g});
+    const el=keyEl(m); if(el) el.classList.add("down");
+  } else {
+    const v=liveVoices.get(m); if(!v) return;
+    const t=actx.currentTime;
+    v.g.gain.cancelScheduledValues(t); v.g.gain.setTargetAtTime(0.0001,t,0.09);
+    setTimeout(()=>{ try{v.o1.stop();v.o2.stop();}catch(e){} },450);
+    liveVoices.delete(m);
+    const el=keyEl(m); if(el) el.classList.remove("down");
   }
-  function highlightNext(){
-    document.querySelectorAll(".hl").forEach(el=>el.classList.remove("hl"));
-    if(!running) return;
-    const m=SONG[cursor+1];
-    if(m!=null){ const el=keyEl(m); if(el) el.classList.add("hl");
-      target.textContent=`Play ${labels[m]} (${name(m)})`; }
-  }
-  function startLesson(){
-    ensureCtx(); running=true; cursor=-1; mistake=false; good=0; ok=0;
-    btnStart.hidden=true; btnRestart.hidden=false;
-    scoreEl.textContent="0 / "+SONG.length;
-    highlightNext();
-  }
-  btnStart.addEventListener("click",startLesson);
-  btnRestart.addEventListener("click",()=>{ btnStart.hidden=false; resetLesson(); });
+}
 
-  function lessonInput(m){
-    if(!running) return;
-    const want=SONG[cursor+1];
-    if(want==null) return;
-    if(m===want){
-      if(!mistake) good++; else ok++;
-      mistake=false; cursor++;
-      scoreEl.textContent=`${cursor+1} / ${SONG.length}`;
-      flashKey(m,"good");
-      if(cursor+1>=SONG.length) finish();
-      else highlightNext();
+/* ================= views ================= */
+function setView(name){ document.querySelectorAll("header.app nav button").forEach(b=>
+  b.classList.toggle("active", b.dataset.view===name)); }
+document.querySelectorAll("header.app nav button").forEach(b=>
+  b.addEventListener("click",()=>{ stopMetro(); VIEWS[b.dataset.view](); }));
+
+let kbApi=null;
+function mountKB(lo,hi,onInput){
+  if(kbApi&&kbApi.cleanup){ kbApi.cleanup(); }
+  const kbEl=document.createElement("div"); kbEl.className="kb";
+  view.append(kbEl);
+  buildKB(kbEl,lo,hi);
+  kbApi=wireKB(kbEl,onInput);
+  kbApi.setLo(()=>lo);
+}
+
+/* ---------- HOME ---------- */
+function homeView(){
+  setView("home"); stopMetro(); clearHl();
+  const ni=nextUnitIndex();
+  const done=UNITS.filter(u=>unitComplete(u.id)).length;
+  view.innerHTML=`<h1>Welcome back</h1>
+    <p class="sub">${done} / ${UNITS.length} units complete · progress saved in your browser</p>
+    <div class="grid">
+      <div class="card" id="home-continue">
+        <span class="tier ${UNITS[Math.max(ni,0)].tier}">${tierName[UNITS[Math.max(ni,0)].tier]}</span>
+        <h3>${ni<0?"All units complete":"Continue: "+UNITS[ni].title}</h3>
+        <div class="meta">${ni<0?"Replay any lesson from the Course tab":UNITS[ni].blurb}</div>
+        <span class="stars"></span>
+      </div>
+      <div class="card" id="home-workout">
+        <h3>⏱ Daily Workout</h3>
+        <div class="meta">5-minute session: reading warm-up → next song → chord drill</div>
+        <span class="stars"></span>
+      </div>
+      <div class="card" id="home-songs">
+        <h3>🎵 Song library</h3>
+        <div class="meta">${SONGS.filter(s=>!s.exercise).length} songs · ${Object.keys(songProg).length} played</div>
+        <span class="stars"></span>
+      </div>
+      <div class="card" id="home-free">
+        <h3>🎹 Free Play</h3>
+        <div class="meta">Explore the keyboard, 2 octaves</div>
+        <span class="stars"></span>
+      </div>
+    </div>`;
+  document.getElementById("home-continue").onclick=()=>{ if(ni>=0) lessonView(UNITS[ni].id); };
+  document.getElementById("home-workout").onclick=workoutView;
+  document.getElementById("home-songs").onclick=songsView;
+  document.getElementById("home-free").onclick=freeView;
+}
+
+/* ---------- COURSE ---------- */
+function courseView(){
+  setView("course"); stopMetro(); clearHl();
+  const groups={};
+  UNITS.forEach((u,i)=>{ (groups[u.tier]=groups[u.tier]||[]).push({u,i}); });
+  view.innerHTML=`<h1>Course</h1>
+    <p class="sub">Units unlock in order · <b>80% accuracy to pass</b> · stars 3★≥90 2★≥70 1★≥40</p>
+    <div id="course-list"></div>`;
+  const list=document.getElementById("course-list");
+  Object.keys(groups).forEach(tier=>{
+    const h=document.createElement("h2"); h.style.cssText="font-size:1.1rem;margin:22px 0 10px";
+    h.innerHTML=`<span class="tier ${tier}">${tierName[tier]}</span>`;
+    list.append(h);
+    const grid=document.createElement("div"); grid.className="grid";
+    groups[tier].forEach(({u,i})=>{
+      const p=prog[u.id]||{}; const unlocked=unitUnlocked(i);
+      const s=songOf(u.song); const meta = u.type==="song"&&s ? `${s.tempo} BPM · diff ${s.difficulty}` :
+        u.type==="trainer"?"staff reading drill": "find the keys";
+      const card=document.createElement("div");
+      card.className="card"+(unlocked?"":" locked");
+      card.innerHTML=`<span class="tier ${u.tier}">${tierName[u.tier]}</span>
+        ${u.mode==="moving"?'<span class="pathbadge soloist">in time</span>':""}
+        <h3>${unlocked?u.title:"🔒 "+u.title}</h3>
+        <div class="meta">${u.type} · ${meta}</div>
+        <span class="stars">${p.stars?starRow(p.stars):""}</span>`;
+      if(unlocked) card.onclick=()=>lessonView(u.id);
+      grid.append(card);
+    });
+    list.append(grid);
+  });
+}
+
+/* ---------- SONGS ---------- */
+function songsView(){
+  setView("songs"); stopMetro(); clearHl();
+  const lib=SONGS.filter(s=>!s.exercise);
+  const genres=["all",...new Set(lib.map(s=>s.genre))];
+  view.innerHTML=`<h1>Songs</h1>
+    <p class="sub">${lib.length} songs — play-along in step mode; "in time" (moving) unlocks after 2★</p>
+    <div class="controls" id="genrebar"></div><div class="grid" id="songgrid"></div>`;
+  const bar=document.getElementById("genrebar"), grid=document.getElementById("songgrid");
+  let curGenre="all";
+  function render(){
+    grid.innerHTML="";
+    lib.filter(s=>curGenre==="all"||s.genre===curGenre)
+       .sort((a,b)=>a.difficulty-b.difficulty||a.title.localeCompare(b.title))
+       .forEach(s=>{
+      const p=songProg[s.id]||{};
+      const movingOk=(p.stars||0)>=2;
+      const card=document.createElement("div"); card.className="card";
+      card.innerHTML=`<h3>${s.title}</h3>
+        <div class="meta">diff ${s.difficulty} · ${s.tempo} BPM · ${s.genre}</div>
+        <div class="controls" style="margin:8px 0 0">
+          <button data-mode="step">▶ Step</button>
+          <button data-mode="moving" ${movingOk?"":"disabled title='earn 2★ in step mode'"}>⏩ In time</button>
+        </div>
+        <span class="stars">${p.stars?starRow(p.stars):""}</span>`;
+      card.querySelectorAll("button").forEach(b=>b.onclick=e=>{
+        e.stopPropagation(); lessonView(null,{song:s,mode:b.dataset.mode,fromSongs:true});
+      });
+      grid.append(card);
+    });
+  }
+  genres.forEach(g=>{
+    const b=document.createElement("button"); b.textContent=g; b.className=g===curGenre?"primary":"";
+    b.onclick=()=>{ curGenre=g; bar.querySelectorAll("button").forEach(x=>x.classList.remove("primary")); b.classList.add("primary"); render(); };
+    bar.append(b);
+  });
+  render();
+}
+
+/* ---------- FREE PLAY ---------- */
+function freeView(){
+  setView("free"); stopMetro(); clearHl();
+  view.innerHTML=`<h1>Free Play</h1>
+    <p class="sub">Two octaves · pointer with glissando · computer keys A W S E D F T G Y H U J K …</p>`;
+  mountKB(48,72,null);
+}
+
+/* ---------- LESSON (the engine) ---------- */
+let L=null; // live lesson state
+function lessonView(unitId, opts){
+  setView(unitId?"course":(opts&&opts.fromSongs?"songs":"home"));
+  stopMetro(); clearHl();
+  const u=unitId?UNITS.find(x=>x.id===unitId):null;
+  const song=opts&&opts.song?opts.song:songOf(u.song);
+  const mode=opts&&opts.mode?opts.mode:(u&&u.mode==="moving"?"moving":"step");
+  const backLabel=u?"← Course":(opts&&opts.fromSongs?"← Songs":"← Home");
+
+  view.innerHTML=`<button class="back">${backLabel}</button>
+    <div class="lessonhead">
+      <h1>${u?u.title:song.title}</h1>
+      <span class="lessonmeta">${song.tempo} BPM · ${mode==="moving"?"moving — play in time":"step — waits for you"}
+        ${u?` · ${tierName[u.tier]}`:""}</span>
+    </div>
+    <div class="lane" id="lane"><div class="hitline"></div></div>
+    <div class="controls">
+      <button id="l-start" class="primary">▶ Start</button>
+      <button id="l-restart" class="hidden">↻ Restart</button>
+      <button id="l-listen">🔊 Listen</button>
+      <div class="progressbar"><i id="l-prog"></i></div>
+      <span class="lessonmeta" id="l-status"></span>
+    </div>
+    <div id="l-finish"></div>`;
+  view.querySelector(".back").onclick=()=>{ stopMetro(); u?courseView():(opts&&opts.fromSongs?songsView():homeView()); };
+  mountKB(48,84,onInput);
+
+  // ---- build the falling lane ----
+  const lane=view.querySelector("#lane");
+  const PPB=44, HIT=10;
+  let beat=0;
+  const layout=song.steps.map(st=>{ const s={...st,startBeat:beat}; beat+=st.beats; return s; });
+  const totalBeats=beat;
+  const kbTop=()=>lane.clientHeight; // px of hit line
+  const notes=layout.filter(s=>!s.rest);
+  notes.forEach((s,i)=>s.idx=i);
+  L={ unitId, song, mode, layout, totalBeats, notes, cursor:0, mistake:false,
+      good:0, ok:0, missed:0, running:false, startT:0, playhead:0, raf:null, listenTimers:[] };
+
+  function drawBlocks(){
+    lane.querySelectorAll(".block").forEach(el=>el.remove());
+    layout.forEach(s=>{
+      if(s.rest) return;
+      const el=document.createElement("div");
+      el.className="block "+(Array.isArray(s.midi)?"chord":"pending");
+      el.dataset.idx=s.idx;
+      const h=Math.max(18,s.beats*PPB-4);
+      el.style.height=h+"px";
+      el.style.width=lane.clientWidth*0.16+"px";
+      el.style.left=(6+ (s.idx%4)*0.2*lane.clientWidth )+"px";
+      el.style.bottom=(HIT + s.startBeat*PPB)+"px";
+      el.textContent=Array.isArray(s.midi)?s.midi.map(m=>NAMES[m%12]).join("+"):NAMES[s.midi%12];
+      lane.append(el);
+    });
+  }
+  drawBlocks();
+  window.addEventListener("resize",drawBlocks);
+
+  function tickLoop(){
+    if(!L.running) return;
+    const msPerBeat=60000/song.tempo;
+    const now=performance.now();
+    L.playhead=(now-L.startT)/msPerBeat;
+    // move blocks
+    lane.querySelectorAll(".block").forEach(el=>{
+      const s=layout.find(x=>String(x.idx)===el.dataset.idx);
+      if(!s) return;
+      el.style.bottom=(HIT + (s.startBeat-L.playhead)*PPB)+"px";
+    });
+    // miss detection (moving mode)
+    if(L.mode==="moving"){
+      const cur=L.notes[L.cursor];
+      if(cur && L.playhead>cur.startBeat+cur.beats+0.4){
+        markMissed(cur); L.cursor++; L.missed++;
+        updateStatus();
+      }
+    }
+    L.raf=requestAnimationFrame(tickLoop);
+  }
+
+  function markMissed(s){ const el=lane.querySelector(`.block[data-idx="${s.idx}"]`);
+    if(el) el.classList.replace(el.className.match(/pending|chord/)[0],"missed"); }
+  function gradeBlock(s,cls){ const el=lane.querySelector(`.block[data-idx="${s.idx}"]`);
+    if(el){ el.classList.remove("pending","chord"); el.classList.add(cls); } }
+
+  function updateStatus(){
+    const done=L.cursor, total=L.notes.length;
+    view.querySelector("#l-prog").style.width=(done/total*100)+"%";
+    view.querySelector("#l-status").textContent=`${done} / ${total}`;
+  }
+
+  function start(){
+    ensureCtx(); stopMetro();
+    // reset visuals
+    lane.querySelectorAll(".block").forEach(el=>{ el.classList.remove("done-good","done-ok","missed","bad-flash"); el.classList.add(Array.isArray(layout.find(x=>String(x.idx)===el.dataset.idx)?.midi)?"chord":"pending"); });
+    L.cursor=0; L.mistake=false; L.good=0; L.ok=0; L.missed=0; L.running=true;
+    view.querySelector("#l-start").classList.add("hidden");
+    view.querySelector("#l-restart").classList.remove("hidden");
+    view.querySelector("#l-finish").innerHTML="";
+    if(L.mode==="step"){
+      L.startT=performance.now();
+      updateStatus(); highlightNext(); tickLoop();
     } else {
-      mistake=true; // the good/ok rule: first try counts, retries cap at "ok"
-      scoreEl.textContent=`${cursor+1} / ${SONG.length} · retry`;
-      flashKey(m,"bad");
+      // count-in then metronome-driven
+      const countBeats=4; let ci=0;
+      view.querySelector("#l-status").textContent="count-in…";
+      metronome(song.tempo, countBeats+L.totalBeats, beat=>{
+        if(beat<countBeats){ ci++; }
+      }, ()=>{ /* done */ });
+      L.startT=performance.now()+countBeats*(60000/song.tempo);
+      // adjust: playhead starts negative during count-in
+      const adjStart=()=>{ L.startT=performance.now()+countBeats*(60000/song.tempo);
+        L.playheadOverride=-countBeats; };
+      // simpler: compute playhead with offset
+      L.countIn=countBeats;
+      tickLoop();
+      updateStatus();
     }
   }
-  function flashKey(m,cls){
-    const el=keyEl(m); if(!el) return;
-    el.style.outline="2px solid "+(cls==="good"?"var(--good)":"var(--bad)");
-    setTimeout(()=>{el.style.outline="";},180);
+  function highlightNext(){
+    clearHl();
+    if(L.mode!=="step"||!L.running) return;
+    const cur=L.notes[L.cursor];
+    if(cur){ (Array.isArray(cur.midi)?cur.midi:[cur.midi]).forEach(m=>hlKey(m,true)); }
   }
+
+  function playheadNow(){
+    const msPerBeat=60000/song.tempo;
+    return L.mode==="moving" ? (performance.now()-L.startT)/msPerBeat - (L.countIn||0)*-1 - (L.countIn||0)*2 + (L.countIn||0) : (performance.now()-L.startT)/msPerBeat;
+  }
+
   function finish(){
-    running=false;
-    const total=good+ok, acc=total?good/total:0;
-    const stars=acc>=0.9?3:acc>=0.7?2:acc>=0.4?1:0;
-    target.textContent="★ Complete!"; target.classList.add("done");
-    starsEl.textContent="★★★".slice(0,stars)+"☆☆☆".slice(0,3-stars);
-    scoreEl.textContent=`${good} first-try · ${ok} retried · ${(acc*100).toFixed(0)}%`;
-    document.querySelectorAll(".hl").forEach(el=>el.classList.remove("hl"));
+    L.running=false; cancelAnimationFrame(L.raf); stopMetro(); clearHl();
+    const total=L.notes.length;
+    const attempted=L.good+L.ok;
+    const accuracy=attempted? L.good/total : 0;
+    const stars=accuracy>=0.9?3:accuracy>=0.7?2:accuracy>=0.4?1:0;
+    const passed=accuracy>=PASS;
+    // save
+    if(L.unitId){
+      const p=prog[L.unitId]||{stars:0,complete:false};
+      prog[L.unitId]={stars:Math.max(p.stars,stars),complete:p.complete||passed};
+    }
+    const sp=songProg[song.id]||{stars:0};
+    songProg[song.id]={stars:Math.max(sp.stars,stars)};
+    saveProg();
+    view.querySelector("#l-finish").innerHTML=`<div class="finishbox">
+      <div class="bigstars">${starRow(stars)}</div>
+      <div class="stat">${L.good} first-try · ${L.ok} retried · ${L.missed} missed · ${(accuracy*100).toFixed(0)}%</div>
+      <div class="${passed?"pass":"fail"}">${passed?"✓ Unit passed — next unlocked":(accuracy>=0.4?"So close — 80% to pass, try again!":"Keep practicing — replay as much as you like.")}</div>
+      <button class="controls" id="f-again">↻ Play again</button>
+      <button class="controls" id="f-next">Continue</button>
+    </div>`;
+    view.querySelector("#f-again").onclick=start;
+    view.querySelector("#f-next").onclick=()=>{ u?courseView():(opts&&opts.fromSongs?songsView():homeView()); };
   }
 
-  // listen button: play the melody once (Coniker's Listen = ◼ stop toggle)
-  let listenTimers=[];
-  btnListen.addEventListener("click",()=>{
-    ensureCtx();
-    if(listenTimers.length){ listenTimers.forEach(clearTimeout); listenTimers=[];
-      btnListen.textContent="🔊 Listen"; return; }
-    btnListen.textContent="◼ Stop";
-    const bpm=80, beat=60000/bpm;
-    SONG.forEach((m,i)=>{
-      listenTimers.push(setTimeout(()=>{
-        noteOn(m); listenTimers.push(setTimeout(()=>noteOff(m),beat*0.85));
-      },i*beat));
+  /* input handling: both modes route through the grader */
+  function onInput(m,down){
+    if(!down||!L||!L.running) return;
+    const cur=L.notes[L.cursor];
+    if(cur==null) return;
+    const want=Array.isArray(cur.midi)?cur.midi:[cur.midi];
+    if(L.mode==="step"){
+      if(want.includes(m)){
+        gradeBlock(cur, L.mistake?"done-ok":"done-good");
+        if(!L.mistake) L.good++; else L.ok++;
+        L.mistake=false; L.cursor++;
+        updateStatus();
+        if(L.cursor>=L.notes.length) finish(); else highlightNext();
+      } else {
+        L.mistake=true;
+        const el=keyEl(m); if(el){ el.style.outline="2px solid var(--bad)"; setTimeout(()=>el.style.outline="",160); }
+      }
+    } else { // moving: within ±0.4 beats of the note's start
+      const msPerBeat=60000/song.tempo;
+      const ph=(performance.now()-L.startT)/msPerBeat - (L.countIn||0);
+      if(want.includes(m)){
+        const dist=Math.abs(ph-cur.startBeat);
+        if(dist<=0.4){
+          gradeBlock(cur, L.mistake?"done-ok":"done-good");
+          if(!L.mistake) L.good++; else L.ok++;
+          L.mistake=false; L.cursor++; updateStatus();
+          if(L.cursor>=L.notes.length) finish();
+        } else { L.mistake=true; }
+      } else { L.mistake=true; }
+    }
+  }
+
+  /* Listen: play the song once (stop toggle) */
+  view.querySelector("#l-listen").onclick=()=>{
+    ensureCtx(); stopMetro();
+    if(L.listenTimers.length){ L.listenTimers.forEach(clearTimeout); L.listenTimers=[];
+      view.querySelector("#l-listen").textContent="🔊 Listen"; return; }
+    view.querySelector("#l-listen").textContent="◼ Stop";
+    const beat=60000/song.tempo; let t=0;
+    layout.forEach(s=>{
+      if(!s.rest){
+        const midis=Array.isArray(s.midi)?s.midi:[s.midi];
+        L.listenTimers.push(setTimeout(()=>midis.forEach(m=>synthNote(m,s.beats,song.tempo)), t*beat));
+      }
+      t+=s.beats;
     });
-    listenTimers.push(setTimeout(()=>{ listenTimers=[]; btnListen.textContent="🔊 Listen"; },SONG.length*beat+200));
-  });
+    L.listenTimers.push(setTimeout(()=>{ L.listenTimers=[];
+      view.querySelector("#l-listen").textContent="🔊 Listen"; }, t*beat+300));
+  };
 
-  // mode toggle: lesson vs free play
-  btnLesson.addEventListener("click",()=>{
-    btnLesson.classList.add("active"); btnFree.classList.remove("active");
-    document.getElementById("lessonbox").style.display="";
-    btnStart.hidden=false; resetLesson();
-  });
-  btnFree.addEventListener("click",()=>{
-    btnFree.classList.add("active"); btnLesson.classList.remove("active");
-    document.getElementById("lessonbox").style.display="none";
-    running=false; document.querySelectorAll(".hl").forEach(el=>el.classList.remove("hl"));
-  });
+  view.querySelector("#l-start").onclick=start;
+  view.querySelector("#l-restart").onclick=start;
 
-  // route input: when lesson is running, feed the grader too
-  const _noteOn=noteOn;
-  noteOn=function(m){ _noteOn(m); lessonInput(m); };
+  if(mode==="moving"){
+    // moving mode: auto-start is per UX rule NOT for moving (needs ▶)
+    view.querySelector("#l-status").textContent="press Start, then play in time with the metronome";
+  } else {
+    view.querySelector("#l-status").textContent="press Start (step mode waits for the right key)";
+  }
+}
 
-  resetLesson();
+/* ---------- WORKOUT ---------- */
+function workoutView(){
+  setView("home"); stopMetro();
+  const ni=nextUnitIndex();
+  const nextSong= ni>=0&&songOf(UNITS[ni].song)&&!UNITS[ni].song.startsWith("chord")&&
+                  !UNITS[ni].song.startsWith("switch")&&UNITS[ni].type==="song"
+                  ? songOf(UNITS[ni].song) : SONGS.filter(s=>!s.exercise&&s.difficulty===1)[0];
+  const chordUnit=UNITS.find(u=>u.type==="song"&&(u.song.startsWith("chord")||u.song.startsWith("prog")));
+  view.innerHTML=`<h1>⏱ Daily Workout — 5 minutes</h1>
+    <p class="sub">Three segments, chained: warm-up → song → chords. Segments use the same lesson engine.</p>
+    <div class="grid">
+      <div class="card" id="w1"><h3>1 · Reading warm-up</h3><div class="meta">${nextSong.title} in step mode</div></div>
+      <div class="card" id="w2"><h3>2 · Play a song</h3><div class="meta">${nextSong.title} — step again, focus on first-try accuracy</div></div>
+      <div class="card" id="w3"><h3>3 · Chord drill</h3><div class="meta">${chordUnit?chordUnit.title:"The C Chord"}</div></div>
+    </div>
+    <p class="sub" style="margin-top:14px">Workout chains launch each segment in sequence — for the prototype, tap each in order.</p>`;
+  document.getElementById("w1").onclick=()=>lessonView(null,{song:nextSong,mode:"step"});
+  document.getElementById("w2").onclick=()=>lessonView(null,{song:nextSong,mode:"step"});
+  document.getElementById("w3").onclick=()=>lessonView(chordUnit?chordUnit.id:null,{song:songOf(chordUnit?chordUnit.song:"chord-c"),mode:"step",fromSongs:true});
+}
+
+/* ================= boot ================= */
+homeView();
 })();
-
 </script>
-
 </body>
 </html>

@@ -80,7 +80,7 @@
   .wk .lbl,.bk .lbl { position:absolute; bottom:8px; left:0; right:0; text-align:center;
         color:#666; font-size:.7rem; pointer-events:none; }
   .bk .lbl { bottom:6px; color:#9a9aa6; font-size:.6rem; }
-  .bk { position:absolute; top:0; width:6.4%; height:62%; z-index:2;
+  .bk { position:absolute; top:0; height:62%; z-index:2;
         background:linear-gradient(#33343d,#101116); border:1px solid #000;
         border-radius:0 0 5px 5px; cursor:pointer; }
   .wk.down { background:linear-gradient(#d7e5ff,#b9d2ff); }
@@ -131,6 +131,8 @@
   <a href="https://github.com/itpick/openpiano">github.com/itpick/openpiano</a></footer>
 
 <script src="app/data.js"></script>
+<script src="app/render.js"></script>
+<script src="app/mic.js"></script>
 <script>
 (() => {
 "use strict";
@@ -159,6 +161,16 @@ const starRow = n => "★★★".slice(0,n)+"☆☆☆".slice(0,3-n);
 
 /* ================= audio (two detuned oscillators + ADSR) ================= */
 let actx=null, master=null; const voices=new Map();
+function ensureAudioCtx(){
+  if(!actx){ actx=new (window.AudioContext||window.webkitAudioContext)();
+    master=actx.createGain(); master.gain.value=0.32; master.connect(actx.destination); }
+  if(actx.state==="suspended") actx.resume();
+  return actx;
+}
+window.__op={ get ctx(){ return actx; }, ensureCtx: ensureAudioCtx };
+/* e2e probe: sound a note through the app's own synth so the mic can prove
+   echo suppression (the app must NOT grade its own speaker output). */
+window.__opEchoProbe=function(){ synthNote(69,0.8,90); };
 function ensureCtx(){
   if(!actx){ actx=new (window.AudioContext||window.webkitAudioContext)();
     master=actx.createGain(); master.gain.value=0.32; master.connect(actx.destination); }
@@ -168,6 +180,11 @@ function midiFreq(m){ return 440*Math.pow(2,(m-69)/12); }
 function synthNote(midi, durBeats=1, bpm=90){
   ensureCtx();
   const t=actx.currentTime, f=midiFreq(midi), secs=Math.max(0.25, durBeats*60/bpm);
+  // echo-suppression stamp: the mic must ignore our own speaker. Stamp at onset
+  // and again at the audible decay end (~0.6s) — NOT at note-end, or fast
+  // same-pitch repeats get swallowed by the echo window.
+  if(window.Mic) window.Mic.stampEcho(midi);
+  setTimeout(()=>{ if(window.Mic) window.Mic.stampEcho(midi); }, Math.min(secs*600, 900));
   const o1=actx.createOscillator(), o2=actx.createOscillator(), g=actx.createGain();
   o1.type="triangle"; o2.type="triangle";
   o1.frequency.value=f; o2.frequency.value=f*1.003;
@@ -179,17 +196,22 @@ function synthNote(midi, durBeats=1, bpm=90){
   o1.start(t); o2.start(t);
   o1.stop(t+secs+0.4); o2.stop(t+secs+0.4);
 }
-let metroTimer=null;
+let metroTimer=null, metroStartT=0;
 function metronome(bpm, beats, onTick, onDone){
   ensureCtx();
   const msPerBeat=60000/bpm;
-  // click via short noise-ish osc
-  let beat=0;
-  const tick=()=>{
-    const t=actx.currentTime, o=actx.createOscillator(), g=actx.createGain();
-    o.type="square"; o.frequency.value= beat%4===0?1568:1046;
+  // schedule every click on the AudioContext clock (sample-accurate, no
+  // setInterval drift) — the visual tick callback is the fallback timer
+  metroStartT=actx.currentTime;
+  for(let b=0;b<beats;b++){
+    const t=metroStartT+b*msPerBeat/1000;
+    const o=actx.createOscillator(), g=actx.createGain();
+    o.type="square"; o.frequency.value= b%4===0?1568:1046;
     g.gain.setValueAtTime(0.08,t); g.gain.exponentialRampToValueAtTime(0.0001,t+0.05);
     o.connect(g); g.connect(master); o.start(t); o.stop(t+0.06);
+  }
+  let beat=0;
+  const tick=()=>{
     if(onTick) onTick(beat);
     beat++;
     if(beat>=beats){ stopMetro(); if(onDone) onDone(); }
@@ -198,6 +220,9 @@ function metronome(bpm, beats, onTick, onDone){
   metroTimer=setInterval(tick, msPerBeat);
 }
 function stopMetro(){ if(metroTimer){ clearInterval(metroTimer); metroTimer=null; } }
+function metroStartPerf(){ // performance.now() aligned to the metronome's beat 0
+  return metroStartT ? performance.now() - (actx.currentTime - metroStartT)*1000 : performance.now();
+}
 
 /* ================= keyboard ================= */
 const WHITE=m=>![1,3,6,8,10].includes(((m%12)+12)%12);
@@ -216,7 +241,11 @@ function buildKB(kbEl, lo, hi){
   blacks.forEach(m=>{
     const left=whites.filter(w=>w<m).length;
     const el=document.createElement("div"); el.className="bk"; el.dataset.midi=m;
-    el.style.left=(left*wW - wW*0.032)+"%";
+    // real-piano ratio: black ≈ 58% of a white key's width, centered on the
+    // boundary between its two neighbors
+    const bw=wW*0.58;
+    el.style.width=bw+"%";
+    el.style.left=(left*wW - bw/2)+"%";
     el.innerHTML=`<span class="lbl">${NAMES[m%12]}</span>`;
     kbEl.append(el); keyEls[m]=el;
   });
@@ -230,7 +259,7 @@ function wireKB(kbEl, onInput){
   let down=false; const active=new Map();
   const midiAt=e=>{ const el=document.elementFromPoint(e.clientX,e.clientY);
     return el&&el.dataset&&el.dataset.midi?+el.dataset.midi:null; };
-  kbEl.addEventListener("pointerdown",e=>{ down=true; kbEl.setPointerCapture(e.pointerId);
+  kbEl.addEventListener("pointerdown",e=>{ down=true; try{ kbEl.setPointerCapture(e.pointerId);}catch(err){}
     const m=midiAt(e); if(m!=null){ active.set(e.pointerId,m); press(m);} });
   kbEl.addEventListener("pointermove",e=>{ if(!down) return;
     const prev=active.get(e.pointerId), m=midiAt(e);
@@ -240,8 +269,7 @@ function wireKB(kbEl, onInput){
     active.delete(e.pointerId); if(!active.size) down=false; };
   kbEl.addEventListener("pointerup",up); kbEl.addEventListener("pointercancel",up);
 
-  const KEYMAP={a:0,w:1,s:2,e:3,d:4,f:5,t:6,g:7,y:8,h:9,u:10,j:11,k:12,o:13,l:14,p:15,";":16};
-  const held=new Set();
+  const KEYMAP={a:0,w:1,s:2,e:3,d:4,f:5,t:6,g:7,y:8,h:9,u:10,j:11,k:12,o:13,l:14,p:15,";":16};  const held=new Set();
   const kd=e=>{ if(e.repeat||e.target.tagName==="SELECT"||e.target.tagName==="INPUT") return;
     const off=KEYMAP[e.key.toLowerCase()]; if(off==null) return;
     const m=kbLo()+off; if(held.has(m)) return; held.add(m); press(m); };
@@ -282,6 +310,7 @@ function synthNotePress(m,down){
 }
 
 /* ================= views ================= */
+const VIEWS={ home:homeView, course:courseView, songs:songsView, free:freeView };
 function setView(name){ document.querySelectorAll("header.app nav button").forEach(b=>
   b.classList.toggle("active", b.dataset.view===name)); }
 document.querySelectorAll("header.app nav button").forEach(b=>
@@ -418,9 +447,25 @@ function lessonView(unitId, opts){
   setView(unitId?"course":(opts&&opts.fromSongs?"songs":"home"));
   stopMetro(); clearHl();
   const u=unitId?UNITS.find(x=>x.id===unitId):null;
-  const song=opts&&opts.song?opts.song:songOf(u.song);
-  const mode=opts&&opts.mode?opts.mode:(u&&u.mode==="moving"?"moving":"step");
-  const backLabel=u?"← Course":(opts&&opts.fromSongs?"← Songs":"← Home");
+  // keyfind/trainer units have no library song — synthesize a drill song from
+  // the unit data (mirrors simpli-piano's trainer/keyfind lesson plumbing)
+  let song;
+  if (opts&&opts.song) song=opts.song;
+  else if (u&&u.song) song=songOf(u.song);
+  else if (u&&u.type==="keyfind"){
+    // random-order key finding: u.notes shuffled, goal repetitions
+    const notes=(u.notes||[60,62,64]).slice();
+    const seq=[]; for(let i=0;i<(u.goal||6);i++) seq.push(notes[Math.floor(Math.random()*notes.length)]);
+    song={id:"drill-"+u.id,title:u.title,difficulty:1,tempo:88,genre:"exercise",
+          steps:seq.map(m=>({midi:m,beats:1})),lo:Math.min(...seq),hi:Math.max(...seq)};
+  } else if (u&&u.type==="trainer"){
+    // staff-reading drill: fixedNotes in random order (staff rendering TODO)
+    const notes=(u.fixedNotes||[60,62,64]).slice();
+    const seq=[]; for(let i=0;i<(u.goal||8);i++) seq.push(notes[Math.floor(Math.random()*notes.length)]);
+    song={id:"drill-"+u.id,title:u.title,difficulty:1,tempo:84,genre:"exercise",
+          steps:seq.map(m=>({midi:m,beats:1})),lo:Math.min(...seq),hi:Math.max(...seq),clef:u.clef};
+  } else song=SONGS[0];
+  const mode=opts&&opts.mode?opts.mode:(u&&u.mode==="moving"?"moving":"step");  const backLabel=u?"← Course":(opts&&opts.fromSongs?"← Songs":"← Home");
 
   view.innerHTML=`<button class="back">${backLabel}</button>
     <div class="lessonhead">
@@ -433,12 +478,12 @@ function lessonView(unitId, opts){
       <button id="l-start" class="primary">▶ Start</button>
       <button id="l-restart" class="hidden">↻ Restart</button>
       <button id="l-listen">🔊 Listen</button>
+      <button id="l-mic" title="Play your real piano — the app listens and grades">🎤 Mic</button>
       <div class="progressbar"><i id="l-prog"></i></div>
       <span class="lessonmeta" id="l-status"></span>
     </div>
     <div id="l-finish"></div>`;
-  view.querySelector(".back").onclick=()=>{ stopMetro(); u?courseView():(opts&&opts.fromSongs?songsView():homeView()); };
-  mountKB(48,84,onInput);
+  view.querySelector(".back").onclick=()=>{ stopMic(); stopMetro(); u?courseView():(opts&&opts.fromSongs?songsView():homeView()); };
 
   // ---- build the falling lane ----
   const lane=view.querySelector("#lane");
@@ -451,6 +496,37 @@ function lessonView(unitId, opts){
   notes.forEach((s,i)=>s.idx=i);
   L={ unitId, song, mode, layout, totalBeats, notes, cursor:0, mistake:false,
       good:0, ok:0, missed:0, running:false, startT:0, playhead:0, raf:null, listenTimers:[] };
+  mountKB(48,84,onInput);
+
+  // mic input: always share the app's AudioContext so the virtual-mic stream and
+  // the analyser live on the same clock (real devices: same context = same latency)
+  window.Mic.useContext(ensureAudioCtx());
+  let inputSource="tap";
+  const micBtn=view.querySelector("#l-mic");
+  // chords are tap-only: the mic is monophonic (ACF2+); chord detection is the
+  // commercial app's MusicSense moat (see research/simpli-piano-coniker)
+  const hasChords=layout.some(s=>!s.rest&&Array.isArray(s.midi));
+  if(hasChords){ micBtn.disabled=true; micBtn.title="Chords are graded by tapping — the mic grades single notes only"; }
+  micBtn.onclick=async()=>{
+    ensureCtx();
+    if(inputSource==="mic"){ stopMic(); inputSource="tap"; micBtn.classList.remove("primary"); return; }
+    micBtn.textContent="🎤 starting…";
+    try{
+      await window.Mic.start(m=>{
+        synthNotePress(m,true); setTimeout(()=>synthNotePress(m,false),150);
+        onInput(m,true);
+      });
+      inputSource="mic"; micBtn.classList.add("primary"); micBtn.textContent="🎤 listening (tap to stop)";
+      view.querySelector("#l-status").textContent="mic on — play on your real piano";
+    }catch(err){
+      micBtn.textContent="🎤 mic unavailable";
+      view.querySelector("#l-status").textContent="mic error: "+err.message;
+      setTimeout(()=>{ micBtn.textContent="🎤 Mic"; },3000);
+    }
+  };
+  function stopMic(){ if(window.Mic&&window.Mic.info().running){ window.Mic.stop();
+    if(micBtn){ micBtn.classList.remove("primary"); micBtn.textContent="🎤 Mic"; } inputSource="tap"; } }
+  if(L) L.stopMic=stopMic;
 
   function drawBlocks(){
     lane.querySelectorAll(".block").forEach(el=>el.remove());
@@ -475,7 +551,8 @@ function lessonView(unitId, opts){
     if(!L.running) return;
     const msPerBeat=60000/song.tempo;
     const now=performance.now();
-    L.playhead=(now-L.startT)/msPerBeat;
+    // playhead relative to beat 0 (count-in makes it negative)
+    L.playhead=(now-L.startT)/msPerBeat - (L.countIn||0);
     // move blocks
     lane.querySelectorAll(".block").forEach(el=>{
       const s=layout.find(x=>String(x.idx)===el.dataset.idx);
@@ -488,6 +565,7 @@ function lessonView(unitId, opts){
       if(cur && L.playhead>cur.startBeat+cur.beats+0.4){
         markMissed(cur); L.cursor++; L.missed++;
         updateStatus();
+        if(L.cursor>=L.notes.length) finish();
       }
     }
     L.raf=requestAnimationFrame(tickLoop);
@@ -517,17 +595,13 @@ function lessonView(unitId, opts){
       updateStatus(); highlightNext(); tickLoop();
     } else {
       // count-in then metronome-driven
-      const countBeats=4; let ci=0;
+      const countBeats=4;
       view.querySelector("#l-status").textContent="count-in…";
-      metronome(song.tempo, countBeats+L.totalBeats, beat=>{
-        if(beat<countBeats){ ci++; }
-      }, ()=>{ /* done */ });
-      L.startT=performance.now()+countBeats*(60000/song.tempo);
-      // adjust: playhead starts negative during count-in
-      const adjStart=()=>{ L.startT=performance.now()+countBeats*(60000/song.tempo);
-        L.playheadOverride=-countBeats; };
-      // simpler: compute playhead with offset
+      metronome(song.tempo, countBeats+L.totalBeats, null, ()=>{ /* done */ });
+      // playhead 0 = first note's startBeat; count-in keeps it negative until beat 0.
+      // Clock = the AudioContext-scheduled metronome start (drift-free).
       L.countIn=countBeats;
+      L.startT=metroStartPerf();
       tickLoop();
       updateStatus();
     }
@@ -545,29 +619,34 @@ function lessonView(unitId, opts){
   }
 
   function finish(){
-    L.running=false; cancelAnimationFrame(L.raf); stopMetro(); clearHl();
-    const total=L.notes.length;
-    const attempted=L.good+L.ok;
-    const accuracy=attempted? L.good/total : 0;
-    const stars=accuracy>=0.9?3:accuracy>=0.7?2:accuracy>=0.4?1:0;
-    const passed=accuracy>=PASS;
-    // save
-    if(L.unitId){
-      const p=prog[L.unitId]||{stars:0,complete:false};
-      prog[L.unitId]={stars:Math.max(p.stars,stars),complete:p.complete||passed};
+    try{
+      L.running=false; cancelAnimationFrame(L.raf); stopMetro(); stopMic(); clearHl();
+      const total=L.notes.length;
+      const attempted=L.good+L.ok;
+      const accuracy=attempted? L.good/total : 0;
+      const stars=accuracy>=0.9?3:accuracy>=0.7?2:accuracy>=0.4?1:0;
+      const passed=accuracy>=PASS;
+      // save
+      if(L.unitId){
+        const p=prog[L.unitId]||{stars:0,complete:false};
+        prog[L.unitId]={stars:Math.max(p.stars,stars),complete:p.complete||passed};
+      }
+      const sp=songProg[song.id]||{stars:0};
+      songProg[song.id]={stars:Math.max(sp.stars,stars)};
+      saveProg();
+      view.querySelector("#l-finish").innerHTML=`<div class="finishbox">
+        <div class="bigstars">${starRow(stars)}</div>
+        <div class="stat">${L.good} first-try · ${L.ok} retried · ${L.missed} missed · ${(accuracy*100).toFixed(0)}%</div>
+        <div class="${passed?"pass":"fail"}">${passed?"✓ Unit passed — next unlocked":(accuracy>=0.4?"So close — 80% to pass, try again!":"Keep practicing — replay as much as you like.")}</div>
+        <button class="controls" id="f-again">↻ Play again</button>
+        <button class="controls" id="f-next">Continue</button>
+      </div>`;
+      view.querySelector("#f-again").onclick=start;
+      view.querySelector("#f-next").onclick=()=>{ u?courseView():(opts&&opts.fromSongs?songsView():homeView()); };
+    }catch(err){
+      console.error("finish error:", err);
+      view.querySelector("#l-finish").innerHTML=`<div class="finishbox"><div class="stat">finish error: ${err.message}</div></div>`;
     }
-    const sp=songProg[song.id]||{stars:0};
-    songProg[song.id]={stars:Math.max(sp.stars,stars)};
-    saveProg();
-    view.querySelector("#l-finish").innerHTML=`<div class="finishbox">
-      <div class="bigstars">${starRow(stars)}</div>
-      <div class="stat">${L.good} first-try · ${L.ok} retried · ${L.missed} missed · ${(accuracy*100).toFixed(0)}%</div>
-      <div class="${passed?"pass":"fail"}">${passed?"✓ Unit passed — next unlocked":(accuracy>=0.4?"So close — 80% to pass, try again!":"Keep practicing — replay as much as you like.")}</div>
-      <button class="controls" id="f-again">↻ Play again</button>
-      <button class="controls" id="f-next">Continue</button>
-    </div>`;
-    view.querySelector("#f-again").onclick=start;
-    view.querySelector("#f-next").onclick=()=>{ u?courseView():(opts&&opts.fromSongs?songsView():homeView()); };
   }
 
   /* input handling: both modes route through the grader */
@@ -576,8 +655,33 @@ function lessonView(unitId, opts){
     const cur=L.notes[L.cursor];
     if(cur==null) return;
     const want=Array.isArray(cur.midi)?cur.midi:[cur.midi];
+    // chord grading: a chord needs ALL its keys within the 1200ms window
+    // (foxzi's CHORD_WINDOW_MS). Track the remaining set on L.remaining.
+    if(Array.isArray(cur.midi)){
+      if(!L.remaining) L.remaining=new Set(cur.midi);
+      if(L.remaining.has(m)){
+        L.remaining.delete(m);
+        hlKey(m,false);
+        if(L.remaining.size===0){ // chord complete
+          L.remaining=null;
+          L.cursor++;
+          if(!L.mistake) L.good++; else L.ok++;
+          L.mistake=false;
+          updateStatus();
+          if(L.cursor>=L.notes.length) finish(); else highlightNext();
+        }
+      } else { // wrong chord member
+        L.mistake=true; L.remaining=null; L.remainingDeadline=0;
+        const el=keyEl(m); if(el){ el.style.outline="2px solid var(--bad)"; setTimeout(()=>el.style.outline="",160); }
+      }
+      return;
+    }
+    // melodic step
+    L.remaining=null;
+    // mic input: unmatched notes are IGNORED (never penalized) — tap asymmetry
+    if(inputSource==="mic" && m!==cur.midi) return;
     if(L.mode==="step"){
-      if(want.includes(m)){
+      if(m===cur.midi){
         gradeBlock(cur, L.mistake?"done-ok":"done-good");
         if(!L.mistake) L.good++; else L.ok++;
         L.mistake=false; L.cursor++;
@@ -590,7 +694,7 @@ function lessonView(unitId, opts){
     } else { // moving: within ±0.4 beats of the note's start
       const msPerBeat=60000/song.tempo;
       const ph=(performance.now()-L.startT)/msPerBeat - (L.countIn||0);
-      if(want.includes(m)){
+      if(m===cur.midi){
         const dist=Math.abs(ph-cur.startBeat);
         if(dist<=0.4){
           gradeBlock(cur, L.mistake?"done-ok":"done-good");

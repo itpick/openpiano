@@ -1,0 +1,14 @@
+{
+  "name": "openpiano",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Open-source piano learning app — prototype with mic grading e2e tests",
+  "scripts": {
+    "test": "playwright test",
+    "test:mic": "playwright test tests/e2e/mic.spec.js",
+    "test:sweep": "playwright test tests/e2e/mic-sweep.spec.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  }
+}

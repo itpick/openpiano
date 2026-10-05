@@ -141,5 +141,32 @@
     return { input, destroy(){ done=true; clearTimeout(tHandle); } };
   }
 
-  window.Staff={ drawNote, trainerView, whiteInRange, LEVELS };
+  window.Staff={ drawNote, trainerView, whiteInRange, LEVELS, drawSongStrip };
+
+  /** Melody strip: whole song drawn as compact pitch-line on a mini staff. */
+  function drawSongStrip(song){
+    const W=Math.min(1100, Math.max(600, song.steps.length*26)), H=150;
+    const svg=makeSvg(W,H);
+    for(let i=0;i<5;i++){
+      svg.append(el("line",{x1:10,x2:W-10,y1:40+i*11,y2:40+i*11,stroke:"#3a415a","stroke-width":1}));
+    }
+    const lo=song.lo, hi=song.hi;
+    const yFor=m=>{ const di=diatonic(m); const dTop=diatonic(hi)+2, dBot=diatonic(lo)-2;
+      const t=(dTop-di)/Math.max(1,dTop-dBot); return 40-18+t*(H-70); };
+    // bar lines every 4 beats
+    let beat=0;
+    song.steps.forEach((st,i)=>{
+      if(st.rest){ beat+=st.beats; return; }
+      const midis=Array.isArray(st.midi)?st.midi:[st.midi];
+      const x=16+ (beat/song.steps.reduce((a,s)=>a+s.beats,0))*(W-32);
+      midis.forEach(m=>{
+        svg.append(el("circle",{cx:x,cy:yFor(m),r:3.4,fill: midis.length>1?"#ffd166":"#7aa2ff"}));
+      });
+      if(Math.abs(beat%4)<0.01 && beat>0){
+        svg.append(el("line",{x1:x,x2:x,y1:38,y2:82,stroke:"#3a415a","stroke-width":1}));
+      }
+      beat+=st.beats;
+    });
+    return svg;
+  }
 })();

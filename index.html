@@ -50,6 +50,7 @@
   .tier { font-size:.68rem; border-radius:5px; padding:2px 7px; display:inline-block; margin-bottom:6px; }
   .tier.beginner{background:#14351f;color:#8fe3a4} .tier.intermediate{background:#332a14;color:#ffd97a}
   .tier.chords-basics{background:#341b28;color:#ffa9c8} .tier.chords-prog{background:#2c1a3a;color:#c9a2ff}
+  .tier.lead-sheet{background:#241a3a;color:#c9a2ff}
   .pathbadge { font-size:.68rem; border-radius:5px; padding:2px 7px; display:inline-block; margin-left:6px; }
   .pathbadge.soloist{background:#14304f;color:#8fc3ff} .pathbadge.chords{background:#431b2c;color:#ffa9c8}
   /* ---------- lesson view ---------- */
@@ -113,6 +114,25 @@
   .recapbox { background:var(--panel); border:1px dashed #2e3548; border-radius:var(--radius);
     padding:10px 14px; margin-bottom:12px; font-size:.88rem; color:var(--muted); }
   .recapbox b { color:var(--ink); }
+  /* ---- course map (winding path) ---- */
+  .cmap-band { margin-bottom:8px; }
+  .cmap-band-title { margin:14px 0 8px; }
+  .cmap-row { display:flex; flex-wrap:wrap; gap:6px; }
+  .cmap-row.reverse { flex-direction:row-reverse; }
+  .cmap-node { width:96px; text-align:center; cursor:pointer; padding:6px 2px;
+    border-radius:10px; transition:background .15s; }
+  .cmap-node:hover { background:var(--panel); }
+  .cmap-node.locked { opacity:.45; cursor:default; }
+  .cmap-node.locked:hover { background:none; }
+  .cmap-dot { width:44px; height:44px; margin:0 auto 4px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-weight:700;
+    background:linear-gradient(#2a3554,#1c2740); border:2px solid var(--soloist);
+    color:var(--ink); font-size:.95rem; }
+  .cmap-node.chordsc .cmap-dot { border-color:var(--chords); }
+  .cmap-node.leadc .cmap-dot { border-color:#c9a2ff; }
+  .cmap-label { font-size:.72rem; line-height:1.2; color:var(--ink); }
+  .cmap-meta { font-size:.62rem; color:var(--muted); }
+  .cmap-stars { font-size:.68rem; color:#ffd166; }
   .lessonmeta { color:var(--muted); font-size:.85rem; }
   footer { text-align:center; color:var(--muted); font-size:.8rem; padding:30px 0 50px; }
 </style>
@@ -126,8 +146,12 @@
     <button data-view="course">Course</button>
     <button data-view="songs">Songs</button>
     <button data-view="trainer">📖 Read Notes</button>
+    <button data-view="sheet">🎼 Sheet Music</button>
     <button data-view="free">Free Play</button>
   </nav>
+  <select id="locale" style="background:var(--panel2);color:var(--ink);border:1px solid #2e3548;border-radius:8px;padding:4px 8px;font-size:.8rem">
+    <option value="en">EN</option><option value="ru">RU</option><option value="es">ES</option>
+  </select>
 </header>
 
 <main id="view"></main>
@@ -163,6 +187,8 @@ if("serviceWorker" in navigator && location.protocol==="https:"){
 <script src="app/mic.js"></script>
 <script src="app/midi.js"></script>
 <script src="app/staff.js"></script>
+<script src="app/hands.js"></script>
+<script src="app/i18n.js"></script>
 <script>
 (() => {
 "use strict";
@@ -234,7 +260,7 @@ function todayMinutes(){ return Math.round((stats.days[dayKey()]||0)/60); }
 
 /* ================= course helpers (course.js semantics) ================= */
 const PASS = 0.8;
-const tierName = {beginner:"Beginner", intermediate:"Intermediate", "chords-basics":"Chord Basics", "chords-prog":"Progressions"};
+const tierName = {beginner:"Beginner", intermediate:"Intermediate", "chords-basics":"Chord Basics", "chords-prog":"Progressions", "lead-sheet":"Lead Sheet"};
 const unitComplete = id => !!(prog[id] && prog[id].complete);
 const unitUnlocked = i => i<=0 || unitComplete(UNITS[i-1].id);
 const nextUnitIndex = () => { for(let i=0;i<UNITS.length;i++) if(unitUnlocked(i)&&!unitComplete(UNITS[i].id)) return i; return -1; };
@@ -278,6 +304,31 @@ function synthNote(midi, durBeats=1, bpm=90){
   o1.start(t); o2.start(t);
   o1.stop(t+secs+0.4); o2.stop(t+secs+0.4);
 }
+/* ---- backing track: simple bass accompaniment under the melody ----
+ * Patterns ("c-g" = alternate C-root / G-root bars) evoke the play-along
+ * backing that makes Simply Piano's lessons feel like music, not a metronome.
+ * Scheduled on the AudioContext clock like the metronome clicks. */
+function backingChordBar(pattern, bar, t, barSecs){
+  const roots={ "c-g":[ [48,55,64], [43,55,62] ],  // C: C3 G3 E4 / G: G2 G3 D4
+                "c-am-f-g":[ [48,55,64],[45,52,60],[41,53,60],[43,55,62] ] };
+  const seq=roots[pattern]||roots["c-g"];
+  const chord=seq[bar % seq.length];
+  chord.forEach((m,i)=>{
+    const o=actx.createOscillator(), g=actx.createGain();
+    o.type="sine"; o.frequency.value=midiFreq(m);
+    g.gain.setValueAtTime(0.0001,t);
+    g.gain.exponentialRampToValueAtTime(0.09,t+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+barSecs*0.95);
+    o.connect(g); g.connect(master); o.start(t); o.stop(t+barSecs);
+  });
+}
+function playBacking(pattern, bpm, totalBeats, countIn){
+  const barBeats=4, barSecs=barBeats*60/bpm;
+  const t0=actx.currentTime + countIn*(60/bpm);
+  const bars=Math.ceil(totalBeats/barBeats);
+  for(let b=0;b<bars;b++) backingChordBar(pattern, b, t0+b*barSecs, barSecs);
+}
+
 let metroTimer=null, metroStartT=0;
 function metronome(bpm, beats, onTick, onDone){
   ensureCtx();
@@ -403,11 +454,15 @@ function motivate(stars, passed){
 }
 
 /* ================= views ================= */
-const VIEWS={ home:homeView, course:courseView, songs:songsView, free:freeView, trainer:trainerPage };
+const VIEWS={ home:homeView, course:courseView, songs:songsView, free:freeView, trainer:trainerPage, sheet:sheetView };
 function setView(name){ document.querySelectorAll("header.app nav button").forEach(b=>
   b.classList.toggle("active", b.dataset.view===name)); }
 document.querySelectorAll("header.app nav button").forEach(b=>
   b.addEventListener("click",()=>{ stopMetro(); VIEWS[b.dataset.view](); }));
+document.getElementById("locale").value=(window.I18N&&window.I18N.locale)||"en";
+document.getElementById("locale").addEventListener("change",e=>{
+  window.I18N.setLocale(e.target.value); VIEWS[document.querySelector("header.app nav button.active").dataset.view]();
+});
 
 let kbApi=null;
 function mountKB(lo,hi,onInput){
@@ -524,32 +579,38 @@ function profilesView(){
 /* ---------- COURSE ---------- */
 function courseView(){
   setView("course"); stopMetro(); clearHl();
-  const groups={};
-  UNITS.forEach((u,i)=>{ (groups[u.tier]=groups[u.tier]||[]).push({u,i}); });
+  /* winding course map (Simply's iconic path): one node per unit, snaking
+     left→right / right→left per tier band, color-coded by path */
+  const tiers=[];
+  UNITS.forEach((u,i)=>{ const b=tiers.find(t=>t.tier===u.tier); if(b) b.items.push({u,i}); else tiers.push({tier:u.tier,items:[{u,i}]}); });
   view.innerHTML=`<h1>Course</h1>
-    <p class="sub">Units unlock in order · <b>80% accuracy to pass</b> · stars 3★≥90 2★≥70 1★≥40</p>
-    <div id="course-list"></div>`;
-  const list=document.getElementById("course-list");
-  Object.keys(groups).forEach(tier=>{
-    const h=document.createElement("h2"); h.style.cssText="font-size:1.1rem;margin:22px 0 10px";
-    h.innerHTML=`<span class="tier ${tier}">${tierName[tier]}</span>`;
-    list.append(h);
-    const grid=document.createElement("div"); grid.className="grid";
-    groups[tier].forEach(({u,i})=>{
+    <p class="sub">Follow the path · <b>80% accuracy to pass</b> · stars 3★≥90 2★≥70 1★≥40
+    · <span style="color:var(--soloist)">🩵 Soloist</span> · <span style="color:var(--chords)">🩷 Chords</span> · 🟣 Lead Sheet</p>
+    <div id="cmap"></div>`;
+  const map=document.getElementById("cmap");
+  tiers.forEach(({tier,items},ti)=>{
+    const band=document.createElement("div"); band.className="cmap-band";
+    const h=document.createElement("div"); h.className="cmap-band-title";
+    h.innerHTML=`<span class="tier ${tier}">${tierName[tier]||tier}</span>`;
+    band.append(h);
+    const row=document.createElement("div"); row.className="cmap-row";
+    if(ti%2===1) row.classList.add("reverse");
+    items.forEach(({u,i},k)=>{
       const p=prog[u.id]||{}; const unlocked=unitUnlocked(i);
-      const s=songOf(u.song); const meta = u.type==="song"&&s ? `${s.tempo} BPM · diff ${s.difficulty}` :
-        u.type==="trainer"?"staff reading drill": "find the keys";
-      const card=document.createElement("div");
-      card.className="card"+(unlocked?"":" locked");
-      card.innerHTML=`<span class="tier ${u.tier}">${tierName[u.tier]}</span>
-        ${u.mode==="moving"?'<span class="pathbadge soloist">in time</span>':""}
-        <h3>${unlocked?u.title:"🔒 "+u.title}</h3>
-        <div class="meta">${u.type} · ${meta}</div>
-        <span class="stars">${p.stars?starRow(p.stars):""}</span>`;
-      if(unlocked) card.onclick=()=>lessonView(u.id);
-      grid.append(card);
+      const node=document.createElement("div");
+      node.className="cmap-node "+(unlocked?"":"locked ")+(u.tier.startsWith("chords")?"chordsc":"")+(u.tier==="lead-sheet"?" leadc":"");
+      node.style.animationDelay=(k*0.04)+"s";
+      const s=songOf(u.song);
+      const meta = u.type==="song"&&s ? s.title : (u.type==="trainer"?"reading drill":"key drill");
+      node.innerHTML=`<div class="cmap-dot">${unitComplete(u.id)?"★":(unlocked?(k+1):"🔒")}</div>
+        <div class="cmap-label">${u.title}</div>
+        <div class="cmap-meta">${meta}</div>
+        ${p.stars?`<div class="cmap-stars">${starRow(p.stars)}</div>`:""}`;
+      if(unlocked) node.onclick=()=>lessonView(u.id);
+      row.append(node);
     });
-    list.append(grid);
+    band.append(row);
+    map.append(band);
   });
 }
 
@@ -639,6 +700,30 @@ function trainerPage(){
   start({clef:"treble"});
 }
 
+/* ---------- SHEET MUSIC (rewards: unlocked by song completion, printable) ---------- */
+function sheetView(){
+  setView("sheet"); stopMetro(); clearHl();
+  const lib=SONGS.filter(s=>!s.exercise);
+  const earned=lib.filter(s=>(songProg[s.id]||{}).stars>0);
+  view.innerHTML=`<h1>🎼 Sheet Music</h1>
+    <p class="sub">${earned.length} of ${lib.length} unlocked — earn a star in any song to printable-ize it (Simply's reward layer).</p>
+    ${earned.length?'<div class="controls"><button class="primary" onclick="window.print()">🖨 Print</button></div>':""}
+    <div id="sheetlist"></div>`;
+  const list=document.getElementById("sheetlist");
+  if(!earned.length){ list.innerHTML='<p class="sub">Play a song first — its sheet appears here.</p>'; return; }
+  earned.sort((a,b)=>(songProg[b.id].stars)-(songProg[a.id].stars));
+  earned.forEach(s=>{
+    const wrap=document.createElement("div");
+    wrap.style.cssText="background:var(--panel);border:1px solid #2e3548;border-radius:12px;padding:14px;margin-bottom:12px";
+    wrap.innerHTML=`<h3 style="margin-bottom:2px">${s.title} <span class="cmap-stars">${starRow(songProg[s.id].stars)}</span></h3>
+      <div class="meta" style="color:var(--muted);font-size:.75rem;margin-bottom:6px">${s.tempo} BPM · ${s.genre} · key of C major</div>`;
+    // melody line rendered as staff blocks (bar-divided)
+    const svg=window.Staff.drawSongStrip(s);
+    wrap.append(svg);
+    list.append(wrap);
+  });
+}
+
 /* ---------- FREE PLAY ---------- */
 function freeView(){
   setView("free"); stopMetro(); clearHl();
@@ -682,11 +767,12 @@ function lessonView(unitId, opts){
     <div id="l-recap"></div>
     <div class="lane" id="lane"><div class="hitline"></div></div>
     <div class="controls">
-      <button id="l-start" class="primary">▶ Start</button>
-      <button id="l-restart" class="hidden">↻ Restart</button>
-      <button id="l-listen">🔊 Listen</button>
-      <button id="l-mic" title="Play your real piano — the app listens and grades">🎤 Mic</button>
-      <button id="l-midi" title="Connect a MIDI keyboard via USB — perfect recognition">🎚 MIDI</button>
+      <button id="l-start" class="primary">${window.I18N.t("lesson.start")}</button>
+      <button id="l-restart" class="hidden">${window.I18N.t("lesson.restart")}</button>
+      <button id="l-listen">${window.I18N.t("lesson.listen")}</button>
+      <button id="l-mic" title="Play your real piano — the app listens and grades">${window.I18N.t("lesson.mic")}</button>
+      <button id="l-midi" title="Connect a MIDI keyboard via USB — perfect recognition">${window.I18N.t("lesson.midi")}</button>
+      <button id="l-hands" title="Show hand/finger overlay (typing-tutor style)">${window.I18N.t("lesson.hands")}</button>
       <div class="progressbar"><i id="l-prog"></i></div>
       <span class="lessonmeta" id="l-status"></span>
     </div>
@@ -723,6 +809,7 @@ function lessonView(unitId, opts){
   L={ unitId, song, mode, layout, totalBeats, notes, cursor:0, mistake:false,
       good:0, ok:0, missed:0, running:false, startT:0, playhead:0, raf:null, listenTimers:[] };
   mountKB(48,84,onInput);
+  window.Hands.mount(view.querySelector(".kb"));
 
   // mic input: always share the app's AudioContext so the virtual-mic stream and
   // the analyser live on the same clock (real devices: same context = same latency)
@@ -747,11 +834,11 @@ function lessonView(unitId, opts){
     }catch(err){
       micBtn.textContent="🎤 mic unavailable";
       view.querySelector("#l-status").textContent="mic error: "+err.message;
-      setTimeout(()=>{ micBtn.textContent="🎤 Mic"; },3000);
+      setTimeout(()=>{ micBtn.textContent=window.I18N.t("lesson.mic"); },3000);
     }
   };
   function stopMic(){ if(window.Mic&&window.Mic.info().running){ window.Mic.stop();
-    if(micBtn){ micBtn.classList.remove("primary"); micBtn.textContent="🎤 Mic"; } inputSource="tap"; } }
+    if(micBtn){ micBtn.classList.remove("primary"); micBtn.textContent=window.I18N.t("lesson.mic"); } inputSource="tap"; } }
   if(L) L.stopMic=stopMic;
 
   // ---- MIDI input (Phase C): cable input beats the mic for accuracy ----
@@ -774,6 +861,13 @@ function lessonView(unitId, opts){
     }
   };
   if(!window.Midi.available()){ midiBtn.disabled=true; midiBtn.title="Web MIDI needs Chrome/Edge over HTTPS"; }
+
+  // ---- hands overlay (default OFF — the UX rule from the research) ----
+  const handsBtn=view.querySelector("#l-hands");
+  handsBtn.onclick=()=>{
+    window.Hands.show(!window.Hands.visible);
+    handsBtn.classList.toggle("primary", window.Hands.visible);
+  };
 
   function drawBlocks(){
     lane.querySelectorAll(".block").forEach(el=>el.remove());
@@ -846,6 +940,10 @@ function lessonView(unitId, opts){
       const countBeats=4;
       view.querySelector("#l-status").textContent="count-in…";
       metronome(song.tempo, countBeats+L.totalBeats, null, ()=>{ /* done */ });
+      // backing track: bass chords under the melody (the "play along with a
+      // band" layer that makes Simply's lessons feel like music)
+      const pattern=(DATA.backings||{})[song.id];
+      if(pattern) playBacking(pattern, song.tempo, L.totalBeats, countBeats);
       // playhead 0 = first note's startBeat; count-in keeps it negative until beat 0.
       // Clock = the AudioContext-scheduled metronome start (drift-free).
       L.countIn=countBeats;
@@ -858,7 +956,7 @@ function lessonView(unitId, opts){
     clearHl();
     if(L.mode!=="step"||!L.running) return;
     const cur=L.notes[L.cursor];
-    if(cur){ (Array.isArray(cur.midi)?cur.midi:[cur.midi]).forEach(m=>hlKey(m,true)); }
+    if(cur){ (Array.isArray(cur.midi)?cur.midi:[cur.midi]).forEach(m=>{hlKey(m,true); window.Hands.setHighlight(m);}); }
   }
 
   function playheadNow(){
@@ -960,7 +1058,7 @@ function lessonView(unitId, opts){
   view.querySelector("#l-listen").onclick=()=>{
     ensureCtx(); stopMetro();
     if(L.listenTimers.length){ L.listenTimers.forEach(clearTimeout); L.listenTimers=[];
-      view.querySelector("#l-listen").textContent="🔊 Listen"; return; }
+      view.querySelector("#l-listen").textContent=window.I18N.t("lesson.listen"); return; }
     view.querySelector("#l-listen").textContent="◼ Stop";
     const beat=60000/song.tempo; let t=0;
     layout.forEach(s=>{
@@ -971,7 +1069,7 @@ function lessonView(unitId, opts){
       t+=s.beats;
     });
     L.listenTimers.push(setTimeout(()=>{ L.listenTimers=[];
-      view.querySelector("#l-listen").textContent="🔊 Listen"; }, t*beat+300));
+      view.querySelector("#l-listen").textContent=window.I18N.t("lesson.listen"); }, t*beat+300));
   };
 
   view.querySelector("#l-start").onclick=start;

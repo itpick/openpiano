@@ -82,12 +82,14 @@ test.describe("full-content sweep via microphone", () => {
     testInfo.setTimeout(180_000);
     await startPage({ page, context });
     await page.evaluate(() => { localStorage.clear(); });
+    await page.goto("/");
+    await page.locator("#ob-skip").click();
     for (const unitId of ["u1","u2","u3","u4","u5"]) {
       const u = D.units.find(x => x.id === unitId);
       const pool = u.notes || u.fixedNotes;
       await page.goto("/");
       await page.locator("nav button[data-view=course]").click();
-      await page.locator("#course-list .card", { hasText: u.title }).first().click();
+      await page.locator(".cmap-node", { hasText: u.title }).first().click();
       // arm a long random sequence from the unit's pool; step mode ignores
       // non-matching notes, so a superset sequence drives the drill to completion
       const wav = await page.evaluate(({ pool, goal }) => {
@@ -121,13 +123,11 @@ test.describe("full-content sweep via microphone", () => {
     await startPage({ page, context });
     await page.evaluate(() => { localStorage.clear(); });
     await page.locator("nav button[data-view=course]").click();
-    const cards = page.locator("#course-list .card");
-    await expect(cards).toHaveCount(D.units.length);
-    // every unit card shows a title
-    const titles = await cards.locator("h3").allTextContents();
-    expect(titles.filter(t => t.includes("🔒")).length, "fresh state locks all but the first").toBe(D.units.length - 1);
+    const nodes = page.locator(".cmap-node");
+    await expect(nodes).toHaveCount(D.units.length);
+    expect(await page.locator(".cmap-node.locked").count(), "fresh state locks all but the first").toBe(D.units.length - 1);
     // first unit unlocked & clickable
-    await cards.first().click();
+    await nodes.first().click();
     await expect(page.locator("#lane")).toBeVisible();
   });
 });

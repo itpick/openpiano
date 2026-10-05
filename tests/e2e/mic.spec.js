@@ -102,11 +102,11 @@ test.describe("mic mechanics", () => {
     });
     await page.reload();
     await page.locator("nav button[data-view=course]").click();
-    // u7 should now be unlocked (2 unlocked total)
-    const unlocked = await page.locator("#course-list .card:not(.locked)").count();
+    // u7 should now be unlocked (2 unlocked total on the map)
+    const unlocked = await page.locator(".cmap-node:not(.locked)").count();
     expect(unlocked).toBe(2);
-    const nextTitle = await page.locator("#course-list .card:not(.locked) h3").nth(1).textContent();
-    expect(nextTitle).toContain("Au Clair");
+    const nextLabel = await page.locator(".cmap-node:not(.locked) .cmap-label").nth(1).textContent();
+    expect(nextLabel).toContain("Au Clair");
   });
 
   test("workout page renders 3 segments", async ({ page, context }) => {

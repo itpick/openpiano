@@ -83,7 +83,7 @@ test.describe("engagement core", () => {
     await page.goto("/");
     await page.locator("#ob-skip").click();
     await page.locator("nav button[data-view=course]").click();
-    await page.locator("#course-list .card:not(.locked)").first().click();
+    await page.locator(".cmap-node:not(.locked)").first().click();
     // u1 is the first unit — welcome recap
     await expect(page.locator(".recapbox")).toContainText("Welcome");
     // grant u1 complete, open u2 → recap of u1
@@ -95,7 +95,7 @@ test.describe("engagement core", () => {
     });
     await page.goto("/");
     await page.locator("nav button[data-view=course]").click();
-    await page.locator("#course-list .card", { hasText: "Find F and G" }).first().click();
+    await page.locator(".cmap-node", { hasText: "Find F and G" }).first().click();
     await expect(page.locator(".recapbox")).toContainText("Meet the Keys");
   });
 

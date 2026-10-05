@@ -43,13 +43,18 @@ test.describe("mic mechanics", () => {
   test("moving mode: perfectly-timed virtual pianist passes with metronome", async ({ page, context }) => {
     await startPage({ page, context });
     await page.evaluate(() => { localStorage.clear(); });
+    await page.goto("/");
+    await page.locator("#ob-skip").click();  // create player + skip funnel
     const song = D.songs.find(s => s.id === "hot-cross-buns");
-    // grant 2★ so the moving button unlocks, THEN navigate to songs
+    // grant 2★ so the moving button unlocks; the app loads progress at boot,
+    // so seed the per-player key and reload before navigating
     await page.evaluate((id) => {
-      const sp = JSON.parse(localStorage.getItem("openpiano.songs") || "{}");
+      const key = Object.keys(localStorage).find(k => k.includes(".songs."));
+      const sp = JSON.parse(localStorage.getItem(key) || "{}");
       sp[id] = { stars: 2 };
-      localStorage.setItem("openpiano.songs", JSON.stringify(sp));
+      localStorage.setItem(key, JSON.stringify(sp));
     }, song.id);
+    await page.reload();
     await page.goto("/");
     await page.locator("nav button[data-view=songs]").click();
     await armVirtualMic(page, [{rest:true,beats:4}, ...song.steps], song.tempo, { defer: true, loop: false });
@@ -86,13 +91,16 @@ test.describe("mic mechanics", () => {
   test("pass gate: 80% rule unlocks next unit; <80% does not", async ({ page, context }) => {
     await startPage({ page, context });
     await page.evaluate(() => { localStorage.clear(); });
-    // give u6 (Hot Cross Buns) a passing record
-    await page.evaluate(() => {
-      const c = JSON.parse(localStorage.getItem("openpiano.course") || "{}");
-      c.u6 = { stars: 3, complete: true };
-      localStorage.setItem("openpiano.course", JSON.stringify(c));
-    });
     await page.goto("/");
+    await page.locator("#ob-skip").click();
+    // give u6 (Hot Cross Buns) a passing record, then reload so the app re-reads it
+    await page.evaluate(() => {
+      const key = Object.keys(localStorage).find(k => k.includes(".course."));
+      const c = JSON.parse(localStorage.getItem(key) || "{}");
+      c.u6 = { stars: 3, complete: true };
+      localStorage.setItem(key, JSON.stringify(c));
+    });
+    await page.reload();
     await page.locator("nav button[data-view=course]").click();
     // u7 should now be unlocked (2 unlocked total)
     const unlocked = await page.locator("#course-list .card:not(.locked)").count();
@@ -103,6 +111,9 @@ test.describe("mic mechanics", () => {
 
   test("workout page renders 3 segments", async ({ page, context }) => {
     await startPage({ page, context });
+    await page.evaluate(() => { localStorage.clear(); });
+    await page.goto("/");
+    await page.locator("#ob-skip").click();
     await page.locator("#home-workout").click();
     await expect(page.locator("#w1")).toBeVisible();
     await expect(page.locator("#w2")).toBeVisible();

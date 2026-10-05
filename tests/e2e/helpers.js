@@ -131,7 +131,7 @@ async function progress(page) {
 async function awaitFinish(page, timeout = 120_000) {
   await page.waitForSelector(".finishbox", { timeout });
   const stars = await page.locator(".finishbox .bigstars").textContent();
-  const stat = await page.locator(".finishbox .stat").textContent();
+  const stat = await page.locator(".finishbox .stat").first().textContent();
   const verdict = await page.locator(".finishbox .pass, .finishbox .fail").textContent();
   return { stars: (stars.match(/★/g) || []).length, stat: stat.trim(), verdict: verdict.trim() };
 }

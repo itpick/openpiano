@@ -6,6 +6,7 @@
 <title>OpenPiano — learn piano, open source</title>
 <meta name="description" content="OpenPiano: an open, offline-first piano-learning app prototype. Courses, songs, lessons, falling-notes engine, Web Audio synth, mic grading (roadmap).">
 <meta name="theme-color" content="#12141a">
+<link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='24' font-size='24'%3E%F0%9F%8E%B9%3C/text%3E%3C/svg%3E">
 <style>
   :root {
@@ -109,6 +110,9 @@
   .finishbox .fail { color:var(--warn,#ffcc66); font-weight:600; margin-top:6px; }
   .finishbox button { margin-top:14px; }
   .hidden { display:none !important; }
+  .recapbox { background:var(--panel); border:1px dashed #2e3548; border-radius:var(--radius);
+    padding:10px 14px; margin-bottom:12px; font-size:.88rem; color:var(--muted); }
+  .recapbox b { color:var(--ink); }
   .lessonmeta { color:var(--muted); font-size:.85rem; }
   footer { text-align:center; color:var(--muted); font-size:.8rem; padding:30px 0 50px; }
 </style>
@@ -121,6 +125,7 @@
     <button data-view="home" class="active">Home</button>
     <button data-view="course">Course</button>
     <button data-view="songs">Songs</button>
+    <button data-view="trainer">📖 Read Notes</button>
     <button data-view="free">Free Play</button>
   </nav>
 </header>
@@ -128,11 +133,36 @@
 <main id="view"></main>
 
 <footer>OpenPiano prototype · course engine + falling notes + good/ok grading + 80% pass gate ·
+  <span id="sw-status"></span>
   <a href="https://github.com/itpick/openpiano">github.com/itpick/openpiano</a></footer>
+
+<script>
+/* PWA registration + robust update flow (the proven simpli-piano pattern):
+   fetch version with no-store, unregister all SWs, clear caches, reload. */
+if("serviceWorker" in navigator && location.protocol==="https:"){
+  navigator.serviceWorker.register("./sw.js").then(reg=>{
+    document.getElementById("sw-status").textContent="offline-ready ✓ ";
+    const btn=document.createElement("button");
+    btn.textContent="⟳ Update"; btn.className="back"; btn.style.cssText="padding:2px 10px;font-size:.75rem";
+    btn.onclick=async()=>{
+      btn.textContent="updating…";
+      try{ const v=await fetch("./sw.js?u="+Date.now(),{cache:"no-store"}); }catch(e){}
+      const regs=await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r=>r.unregister()));
+      const keys=await caches.keys();
+      await Promise.all(keys.map(k=>caches.delete(k)));
+      location.replace("./?u="+Date.now());
+    };
+    document.getElementById("sw-status").after(btn," · ");
+  }).catch(()=>{});
+}
+</script>
 
 <script src="app/data.js"></script>
 <script src="app/render.js"></script>
 <script src="app/mic.js"></script>
+<script src="app/midi.js"></script>
+<script src="app/staff.js"></script>
 <script>
 (() => {
 "use strict";
@@ -141,14 +171,66 @@ const SONGS = DATA.songs, UNITS = DATA.units;
 const NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
 const view = document.getElementById("view");
 
-/* ================= state (localStorage, single player) ================= */
+/* ================= state (localStorage, per player) ================= */
 const store = {
   get(k,d){ try{ const v=localStorage.getItem("openpiano."+k); return v==null?d:JSON.parse(v);}catch(e){return d;} },
   set(k,v){ localStorage.setItem("openpiano."+k, JSON.stringify(v)); }
 };
-const prog = store.get("course", {}); // {unitId: {stars, complete}}
-const songProg = store.get("songs", {}); // {songId: {stars, bestAccuracy}}
-const saveProg = () => { store.set("course", prog); store.set("songs", songProg); };
+/* profiles (like simpli-piano's profiles.js): up to 5 players, all progress
+   namespaced by player id so nobody sees anybody else's stars */
+const PROFILES_MAX = 5;
+const EMOJIS = ["🎹","🎵","⭐","🎸","🦄","🚀","🐱","🐶","🌈","🎯"];
+const profiles = store.get("profiles", { list: [], activeId: null });
+function newPlayerId(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+function activeProfile(){
+  return profiles.list.find(p=>p.id===profiles.activeId) || null;
+}
+function pkey(base){ const p=activeProfile(); return base+"."+(p?p.id:"anon"); }
+function ensurePlayer(){
+  if(!activeProfile()){ addPlayer("Player 1"); }
+}
+function addPlayer(name){
+  const id=newPlayerId();
+  profiles.list.push({id, name, emoji: EMOJIS[profiles.list.length % EMOJIS.length], created: Date.now()});
+  profiles.activeId=id; store.set("profiles", profiles);
+  return id;
+}
+function switchPlayer(id){ profiles.activeId=id; store.set("profiles", profiles); }
+function removePlayer(id){
+  profiles.list=profiles.list.filter(p=>p.id!==id);
+  if(profiles.activeId===id) profiles.activeId=profiles.list[0]?.id||null;
+  store.set("profiles", profiles);
+  // orphan all per-player keys
+  const pkeys=[];
+  for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i);
+    if(k&&k.includes("."+id)) pkeys.push(k); }
+  pkeys.forEach(k=>localStorage.removeItem(k));
+}
+ensurePlayer();
+
+const prog = store.get(pkey("course"), {}); // {unitId: {stars, complete}}
+const songProg = store.get(pkey("songs"), {}); // {songId: {stars, bestAccuracy}}
+const stats = store.get(pkey("stats"), { days:{}, goalMin:10 }); // practice seconds/day
+const onboard = store.get(pkey("onboard"), {}); // {done, goal, exp, minutes}
+const saveProg = () => { store.set(pkey("course"), prog); store.set(pkey("songs"), songProg);
+  store.set(pkey("stats"), stats); store.set(pkey("onboard"), onboard); };
+
+/* ---- stats: local-day practice seconds, streak (≥60s counts), goal ---- */
+function dayKey(off=0){ const d=new Date(); d.setDate(d.getDate()-off);
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function logPractice(secs){
+  const k=dayKey(); stats.days[k]=(stats.days[k]||0)+Math.round(secs);
+  store.set(pkey("stats"), stats);
+}
+function streak(){
+  let s=0;
+  for(let i=0;i<3650;i++){ const secs=stats.days[dayKey(i)]||0;
+    if(secs>=60) s++;
+    else { if(i===0) continue; break; } // today may still be 0 — don't break yesterday's streak
+  }
+  return s;
+}
+function todayMinutes(){ return Math.round((stats.days[dayKey()]||0)/60); }
 
 /* ================= course helpers (course.js semantics) ================= */
 const PASS = 0.8;
@@ -309,8 +391,19 @@ function synthNotePress(m,down){
   }
 }
 
+/* motivational callout on every finish overlay (Simply pattern; simpli-piano stats.js) */
+function motivate(stars, passed){
+  const st=streak(), today=todayMinutes(), goal=stats.goalMin||10;
+  if(today>=goal && st>=2) return `🔥 ${st}-day streak — daily goal already hit (${today}/${goal} min). Legend.`;
+  if(today>=goal) return `Daily goal hit (${today}/${goal} min). Keep the 🔥 alive tomorrow!`;
+  if(today+3>=goal) return `Almost at today's goal — ${Math.max(goal-today,1)} more min and the streak grows!`;
+  if(stars===3) return `Perfect run! 🔥 streak: ${st} day${st===1?"":"s"} · ${today}/${goal} min today`;
+  if(passed) return `Well played — ${today}/${goal} min today. 🔥 ${st}-day streak`;
+  return `Every replay counts — ${today}/${goal} min toward today's goal.`;
+}
+
 /* ================= views ================= */
-const VIEWS={ home:homeView, course:courseView, songs:songsView, free:freeView };
+const VIEWS={ home:homeView, course:courseView, songs:songsView, free:freeView, trainer:trainerPage };
 function setView(name){ document.querySelectorAll("header.app nav button").forEach(b=>
   b.classList.toggle("active", b.dataset.view===name)); }
 document.querySelectorAll("header.app nav button").forEach(b=>
@@ -329,10 +422,15 @@ function mountKB(lo,hi,onInput){
 /* ---------- HOME ---------- */
 function homeView(){
   setView("home"); stopMetro(); clearHl();
+  const p=activeProfile();
   const ni=nextUnitIndex();
   const done=UNITS.filter(u=>unitComplete(u.id)).length;
-  view.innerHTML=`<h1>Welcome back</h1>
-    <p class="sub">${done} / ${UNITS.length} units complete · progress saved in your browser</p>
+  const st=streak(), today=todayMinutes(), goal=stats.goalMin||10;
+  // onboarding funnel first (per player, skippable — Simply's intro pattern)
+  if(!onboard.done){ onboardView(); return; }
+  view.innerHTML=`<h1>${p.emoji} Hi ${p.name}</h1>
+    <p class="sub">🔥 ${st}-day streak · ${today}/${goal} min today · ${done} / ${UNITS.length} units
+      <button class="back" id="btn-profiles" style="margin-left:10px">👥 Players</button></p>
     <div class="grid">
       <div class="card" id="home-continue">
         <span class="tier ${UNITS[Math.max(ni,0)].tier}">${tierName[UNITS[Math.max(ni,0)].tier]}</span>
@@ -356,10 +454,71 @@ function homeView(){
         <span class="stars"></span>
       </div>
     </div>`;
-  document.getElementById("home-continue").onclick=()=>{ if(ni>=0) lessonView(UNITS[ni].id); };
+  document.getElementById("home-continue").onclick=()=>{ if(ni>=0) lessonView(UNITS[ni].id); else songsView(); };
   document.getElementById("home-workout").onclick=workoutView;
   document.getElementById("home-songs").onclick=songsView;
   document.getElementById("home-free").onclick=freeView;
+  document.getElementById("btn-profiles").onclick=profilesView;
+}
+
+/* ---------- ONBOARDING (Simply's intro funnel: 3 taps → plan) ---------- */
+function onboardView(){
+  setView("home"); stopMetro(); clearHl();
+  const QUESTIONS=[
+    {key:"goal", title:"Why do you want to play piano?", sub:"There's no wrong answer — this shapes your plan.",
+     options:[["songs","🎵","Play songs I love"],["relax","🌙","Relax and unwind"],["challenge","🏆","Challenge myself"]]},
+    {key:"exp", title:"Have you played before?", sub:"We'll start you in the right place.",
+     options:[["new","🌱","Brand new"],["some","🌿","I know a little"],["played","🌳","I've played before"]]},
+    {key:"minutes", title:"Practice how long each day?", sub:"Short and steady beats long and rare.",
+     options:[[5,"⏱","5 minutes"],[10,"⏲","10 minutes"],[15,"⏰","15 minutes"]]},
+  ];
+  const answers={};
+  function ask(qi){
+    if(qi>=QUESTIONS.length){ finish(); return; }
+    const q=QUESTIONS[qi];
+    view.innerHTML=`<h1>${q.title}</h1><p class="sub">${q.sub}</p>
+      <div class="grid">${q.options.map(([v,e,l])=>
+        `<div class="card" data-v="${v}"><h3 style="font-size:1.6rem">${e}</h3><h3>${l}</h3></div>`).join("")}</div>
+      <button class="back" id="ob-skip">Skip for now</button>
+      ${qi>0?'<button class="back" id="ob-back">← Back</button>':""}`;
+    view.querySelectorAll(".card").forEach(c=>c.onclick=()=>{ answers[q.key]=c.dataset.v; ask(qi+1); });
+    const sk=document.getElementById("ob-skip");
+    if(sk) sk.onclick=()=>{ onboard.done=true; onboard.skipped=true; saveProg(); homeView(); };
+    const bk=document.getElementById("ob-back");
+    if(bk) bk.onclick=()=>ask(qi-1);
+  }
+  function finish(){
+    onboard.done=true; Object.assign(onboard, answers);
+    const mins=parseInt(answers.minutes,10); if(mins) stats.goalMin=mins;
+    saveProg();
+    homeView();
+  }
+  ask(0);
+}
+
+/* ---------- PROFILES (up to 5, per-player progress) ---------- */
+function profilesView(){
+  setView("home"); stopMetro(); clearHl();
+  view.innerHTML=`<h1>👥 Who's playing?</h1>
+    <p class="sub">Up to ${PROFILES_MAX} players — each has their own stars, streaks and course progress.</p>
+    <div class="grid" id="plist"></div>
+    ${profiles.list.length<PROFILES_MAX?'<button class="back" id="p-add">＋ Add player</button>':""}
+    <button class="back" id="p-back">← Home</button>`;
+  const list=document.getElementById("plist");
+  profiles.list.forEach(p=>{
+    // per-player course progress count (read directly from their key)
+    const cp=store.get("course."+p.id, {});
+    const done=UNITS.filter(u=>cp[u.id]&&cp[u.id].complete).length;
+    const card=document.createElement("div"); card.className="card";
+    card.innerHTML=`<h3 style="font-size:1.8rem">${p.emoji}</h3>
+      <h3>${p.name}${p.id===profiles.activeId?' <span style="color:var(--accent2)">✓</span>':""}</h3>
+      <div class="meta">${done} units done</div>`;
+    card.onclick=()=>{ switchPlayer(p.id); homeView(); };
+    list.append(card);
+  });
+  const add=document.getElementById("p-add");
+  if(add) add.onclick=()=>{ if(profiles.list.length<PROFILES_MAX){ addPlayer("Player "+(profiles.list.length+1)); profilesView(); } };
+  document.getElementById("p-back").onclick=homeView;
 }
 
 /* ---------- COURSE ---------- */
@@ -433,6 +592,53 @@ function songsView(){
   render();
 }
 
+/* ---------- READ NOTES (staff trainer page, Phase D) ---------- */
+function trainerPage(){
+  setView("trainer"); stopMetro(); clearHl();
+  view.innerHTML=`<h1>📖 Read Notes</h1>
+    <p class="sub">See the note on the staff → play the matching key. Streaks widen the range.
+      Tests score first-try accuracy and notes/min (personal bests saved).</p>
+    <div class="controls">
+      <button id="t-practice" class="primary">∞ Practice (treble)</button>
+      <button id="t-bass">Bass clef practice</button>
+      <button id="t-test30">30-note test</button>
+      <button id="t-test60">60-note test</button>
+    </div>
+    <div id="t-mount"></div>
+    <div class="finishbox hidden" id="t-result"></div>`;
+  let session=null;
+  const mount=document.getElementById("t-mount"), result=document.getElementById("t-result");
+  const bestKey="trainerBest";
+  function start(opts){
+    if(session) session.destroy();
+    result.classList.add("hidden");
+    session=window.Staff.trainerView(mount, Object.assign({
+      onDone(res){
+        const key=bestKey+"."+(opts.clef||"treble")+"."+(opts.testNotes||"practice");
+        const best=store.get(key,{});
+        let bestLine="";
+        if(opts.testNotes){
+          const prevAcc=best.accuracy||0, prevNpm=best.notesPerMin||0;
+          const better=res.accuracy>=prevAcc && res.notesPerMin>=prevNpm;
+          if(better) store.set(key,{accuracy:res.accuracy,notesPerMin:res.notesPerMin});
+          bestLine=` · best: ${(better?res:prevAcc).accuracy!==undefined?(Math.max(res.accuracy,(best.accuracy||0))*100).toFixed(0)+"% / "+Math.max(res.notesPerMin,(best.notesPerMin||0))+" npm":""}`;
+        }
+        result.classList.remove("hidden");
+        result.innerHTML=`<div class="stat">${res.correct}/${res.total} first-try (${(res.accuracy*100).toFixed(0)}%) · ${res.notesPerMin} notes/min${bestLine}${res.timedOut?" · time!":""}</div>
+          <button class="controls primary" id="t-again">↻ Again</button>`;
+        document.getElementById("t-again").onclick=start.bind(null,opts);
+      }
+    }, opts));
+  }
+  document.getElementById("t-practice").onclick=()=>start({clef:"treble"});
+  document.getElementById("t-bass").onclick=()=>start({clef:"bass",fixedNotes:window.Staff.whiteInRange(48,60)});
+  document.getElementById("t-test30").onclick=()=>start({clef:"treble",testNotes:30,timeLimit:120});
+  document.getElementById("t-test60").onclick=()=>start({clef:"treble",testNotes:60,timeLimit:180});
+  // route keyboard/pointer input into the trainer (keyboard only — no lane here)
+  mountKB(48,84,(m,down)=>{ if(session) session.input(m,down); });
+  start({clef:"treble"});
+}
+
 /* ---------- FREE PLAY ---------- */
 function freeView(){
   setView("free"); stopMetro(); clearHl();
@@ -473,17 +679,37 @@ function lessonView(unitId, opts){
       <span class="lessonmeta">${song.tempo} BPM · ${mode==="moving"?"moving — play in time":"step — waits for you"}
         ${u?` · ${tierName[u.tier]}`:""}</span>
     </div>
+    <div id="l-recap"></div>
     <div class="lane" id="lane"><div class="hitline"></div></div>
     <div class="controls">
       <button id="l-start" class="primary">▶ Start</button>
       <button id="l-restart" class="hidden">↻ Restart</button>
       <button id="l-listen">🔊 Listen</button>
       <button id="l-mic" title="Play your real piano — the app listens and grades">🎤 Mic</button>
+      <button id="l-midi" title="Connect a MIDI keyboard via USB — perfect recognition">🎚 MIDI</button>
       <div class="progressbar"><i id="l-prog"></i></div>
       <span class="lessonmeta" id="l-status"></span>
     </div>
     <div id="l-finish"></div>`;
   view.querySelector(".back").onclick=()=>{ stopMic(); stopMetro(); u?courseView():(opts&&opts.fromSongs?songsView():homeView()); };
+
+  // ---- recap: review the previous unit (Simply's lesson-recap pattern) ----
+  if(u){
+    const idx=UNITS.findIndex(x=>x.id===u.id);
+    const prev=idx>0?UNITS[idx-1]:null;
+    const recapEl=view.querySelector("#l-recap");
+    if(prev){
+      const prevSong=prev.song?songOf(prev.song):null;
+      recapEl.innerHTML=`<div class="recapbox">
+        <b>Quick recap:</b> last time — ${prev.title}${prevSong?` (${prevSong.title})`:""}.
+        <button class="back" id="recap-replay" style="margin-left:8px;padding:3px 10px;font-size:.8rem">↻ Replay it</button>
+        <span class="lessonmeta" id="recap-note"></span>
+      </div>`;
+      document.getElementById("recap-replay").onclick=()=>lessonView(prev.id);
+    } else {
+      recapEl.innerHTML=`<div class="recapbox"><b>Welcome!</b> This is your first lesson — find the keys the app lights up.</div>`;
+    }
+  }
 
   // ---- build the falling lane ----
   const lane=view.querySelector("#lane");
@@ -527,6 +753,27 @@ function lessonView(unitId, opts){
   function stopMic(){ if(window.Mic&&window.Mic.info().running){ window.Mic.stop();
     if(micBtn){ micBtn.classList.remove("primary"); micBtn.textContent="🎤 Mic"; } inputSource="tap"; } }
   if(L) L.stopMic=stopMic;
+
+  // ---- MIDI input (Phase C): cable input beats the mic for accuracy ----
+  const midiBtn=view.querySelector("#l-midi");
+  let midiOn=false;
+  midiBtn.onclick=async()=>{
+    if(midiOn){ window.Midi.stop(); midiOn=false; inputSource="tap";
+      midiBtn.classList.remove("primary"); midiBtn.textContent="🎚 MIDI"; return; }
+    try{
+      const name=await window.Midi.start((m,down)=>{
+        synthNotePress(m,down); onInput(m,down);
+      });
+      midiOn=true; inputSource="midi"; midiBtn.classList.add("primary");
+      midiBtn.textContent="🎚 "+(name||"MIDI");
+      stopMic();
+    }catch(err){
+      midiBtn.textContent="🎚 unavailable";
+      view.querySelector("#l-status").textContent="MIDI error: "+err.message;
+      setTimeout(()=>{ midiBtn.textContent="🎚 MIDI"; },3000);
+    }
+  };
+  if(!window.Midi.available()){ midiBtn.disabled=true; midiBtn.title="Web MIDI needs Chrome/Edge over HTTPS"; }
 
   function drawBlocks(){
     lane.querySelectorAll(".block").forEach(el=>el.remove());
@@ -584,6 +831,7 @@ function lessonView(unitId, opts){
 
   function start(){
     ensureCtx(); stopMetro();
+    L.practiceStart=performance.now();
     // reset visuals
     lane.querySelectorAll(".block").forEach(el=>{ el.classList.remove("done-good","done-ok","missed","bad-flash"); el.classList.add(Array.isArray(layout.find(x=>String(x.idx)===el.dataset.idx)?.midi)?"chord":"pending"); });
     L.cursor=0; L.mistake=false; L.good=0; L.ok=0; L.missed=0; L.running=true;
@@ -621,6 +869,7 @@ function lessonView(unitId, opts){
   function finish(){
     try{
       L.running=false; cancelAnimationFrame(L.raf); stopMetro(); stopMic(); clearHl();
+      if(L.practiceStart) logPractice((performance.now()-L.practiceStart)/1000);
       const total=L.notes.length;
       const attempted=L.good+L.ok;
       const accuracy=attempted? L.good/total : 0;
@@ -638,6 +887,7 @@ function lessonView(unitId, opts){
         <div class="bigstars">${starRow(stars)}</div>
         <div class="stat">${L.good} first-try · ${L.ok} retried · ${L.missed} missed · ${(accuracy*100).toFixed(0)}%</div>
         <div class="${passed?"pass":"fail"}">${passed?"✓ Unit passed — next unlocked":(accuracy>=0.4?"So close — 80% to pass, try again!":"Keep practicing — replay as much as you like.")}</div>
+        <div class="stat">${motivate(stars, passed)}</div>
         <button class="controls" id="f-again">↻ Play again</button>
         <button class="controls" id="f-next">Continue</button>
       </div>`;

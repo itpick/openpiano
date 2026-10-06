@@ -9,132 +9,186 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='24' font-size='24'%3E%F0%9F%8E%B9%3C/text%3E%3C/svg%3E">
 <style>
+  /* OpenPiano design system — Simply Piano inspired:
+     bright, warm, playful. Purple #8217FF, teal #00C8AB, cream #F4F1DE. */
   :root {
-    --bg:#12141a; --panel:#1b1f2a; --panel2:#222736; --ink:#e8eaf2; --muted:#9aa3b8;
-    --accent:#7aa2ff; --accent2:#66d9c4; --soloist:#6fb3ff; --chords:#ff9ec4;
-    --good:#7ad97a; --ok:#ffd166; --bad:#ff7a7a; --radius:12px; --max:1080px;
+    --brand:#8217ff; --brand2:#4f21b3; --teal:#00c8ab; --teal2:#00a892;
+    --cream:#f4f1de; --paper:#fffdf7; --sun:#ffd166; --coral:#ff7a7a;
+    --soloist:#3d8bff; --chords:#ff5fa8;
+    --bg:#faf7f0; --ink:#2b2344; --muted:#7a7292;
+    --card:#ffffff; --line:#eee7f8;
+    --radius:18px; --shadow:0 4px 20px rgba(90,60,180,.10);
+    --shadow-lg:0 10px 34px rgba(90,60,180,.16);
+    --max:1060px;
   }
   * { box-sizing:border-box; margin:0; }
+  html { -webkit-text-size-adjust:100%; }
   body { background:var(--bg); color:var(--ink);
-    font:15px/1.55 -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
-  a { color:var(--accent); text-decoration:none; }
+    font:16px/1.55 "Nunito","Avenir Next","Segoe UI",system-ui,-apple-system,sans-serif; }
+  a { color:var(--brand); text-decoration:none; }
   button { font:inherit; }
-  /* ---------- app shell ---------- */
+  h1,h2,h3 { font-weight:800; letter-spacing:-.01em; }
+
+  /* ---------- header ---------- */
   header.app {
-    position:sticky; top:0; z-index:10; background:rgba(18,20,26,.92); backdrop-filter:blur(8px);
-    border-bottom:1px solid #2e3548; padding:10px 16px;
-    display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+    position:sticky; top:0; z-index:10;
+    background:linear-gradient(90deg,var(--brand),#9d4dff);
+    box-shadow:0 2px 14px rgba(130,23,255,.28);
+    padding:10px 16px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;
   }
-  header.app .logo { font-weight:700; font-size:1.05rem; }
+  header.app .logo { font-weight:900; font-size:1.15rem; color:#fff; letter-spacing:.01em; }
+  header.app .logo span { background:rgba(255,255,255,.22); border-radius:8px; padding:1px 8px; margin-left:6px; font-size:.62rem; font-weight:800; letter-spacing:.08em; vertical-align:middle; }
   header.app nav { display:flex; gap:4px; flex-wrap:wrap; }
   header.app nav button {
-    background:none; border:1px solid transparent; color:var(--muted);
-    border-radius:8px; padding:6px 12px; cursor:pointer;
+    background:none; border:none; color:#e8dcff;
+    border-radius:999px; padding:7px 14px; cursor:pointer; font-weight:700;
   }
-  header.app nav button.active { color:var(--ink); border-color:#2e3548; background:var(--panel); }
-  main { max-width:var(--max); margin:0 auto; padding:20px 16px 90px; }
-  h1 { font-size:1.5rem; margin:8px 0 2px; letter-spacing:-0.01em; }
-  .sub { color:var(--muted); margin-bottom:18px; font-size:.95rem; }
+  header.app nav button:hover { background:rgba(255,255,255,.14); color:#fff; }
+  header.app nav button.active { background:#fff; color:var(--brand); box-shadow:0 2px 8px rgba(0,0,0,.18); }
+  header.app select {
+    background:rgba(255,255,255,.16); color:#fff; border:1px solid rgba(255,255,255,.35);
+    border-radius:8px; padding:4px 8px; font-size:.8rem;
+  }
+  header.app select option { color:var(--ink); }
+
+  main { max-width:var(--max); margin:0 auto; padding:22px 16px 90px; }
+  h1 { font-size:1.7rem; margin:10px 0 2px; }
+  .sub { color:var(--muted); margin-bottom:18px; font-size:.97rem; }
+
   /* ---------- cards & grids ---------- */
-  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:14px; }
   .card {
-    background:var(--panel); border:1px solid #2e3548; border-radius:var(--radius);
-    padding:14px; cursor:pointer; transition:border-color .15s;
+    background:var(--card); border-radius:var(--radius); padding:16px;
+    box-shadow:var(--shadow); cursor:pointer; transition:transform .15s, box-shadow .15s;
+    border:2px solid transparent;
   }
-  .card:hover { border-color:var(--accent); }
-  .card h3 { font-size:.98rem; margin-bottom:3px; }
-  .card .meta { color:var(--muted); font-size:.8rem; }
-  .card.locked { opacity:.55; cursor:default; }
-  .card.locked:hover { border-color:#2e3548; }
-  .card .stars { color:#ffd166; letter-spacing:2px; font-size:.85rem; min-height:1em; display:block; }
-  .tier { font-size:.68rem; border-radius:5px; padding:2px 7px; display:inline-block; margin-bottom:6px; }
-  .tier.beginner{background:#14351f;color:#8fe3a4} .tier.intermediate{background:#332a14;color:#ffd97a}
-  .tier.chords-basics{background:#341b28;color:#ffa9c8} .tier.chords-prog{background:#2c1a3a;color:#c9a2ff}
-  .tier.lead-sheet{background:#241a3a;color:#c9a2ff}
-  .pathbadge { font-size:.68rem; border-radius:5px; padding:2px 7px; display:inline-block; margin-left:6px; }
-  .pathbadge.soloist{background:#14304f;color:#8fc3ff} .pathbadge.chords{background:#431b2c;color:#ffa9c8}
-  /* ---------- lesson view ---------- */
-  .back { background:none; border:1px solid #2e3548; color:var(--muted); border-radius:8px;
-          padding:6px 12px; cursor:pointer; margin-bottom:12px; }
-  .back:hover { color:var(--ink); border-color:var(--accent); }
-  .lessonhead { display:flex; gap:14px; align-items:baseline; flex-wrap:wrap; margin-bottom:12px; }
+  .card:hover { transform:translateY(-3px); box-shadow:var(--shadow-lg); border-color:var(--brand); }
+  .card h3 { font-size:1rem; margin-bottom:3px; }
+  .card .meta { color:var(--muted); font-size:.82rem; }
+  .card.locked { opacity:.55; cursor:default; filter:saturate(.6); }
+  .card.locked:hover { transform:none; box-shadow:var(--shadow); border-color:transparent; }
+  .card .stars { color:#f5a623; letter-spacing:2px; font-size:.88rem; min-height:1em; display:block; }
+  .tier { font-size:.68rem; border-radius:999px; padding:3px 10px; display:inline-block; margin-bottom:7px; font-weight:800; color:#fff; }
+  .tier.beginner{background:linear-gradient(90deg,#39c26d,#2ba55c)}
+  .tier.intermediate{background:linear-gradient(90deg,#ff9f43,#ff7a1a)}
+  .tier.chords-basics{background:linear-gradient(90deg,#ff5fa8,#e94b8f)}
+  .tier.chords-prog{background:linear-gradient(90deg,#c86bff,#a03bff)}
+  .tier.lead-sheet{background:linear-gradient(90deg,#8217ff,#5c0fd6)}
+  .pathbadge { font-size:.68rem; border-radius:999px; padding:3px 10px; display:inline-block; margin-left:6px; font-weight:800; }
+  .pathbadge.soloist{background:#e3edff;color:var(--soloist)} .pathbadge.chords{background:#ffe1ef;color:var(--chords)}
+
+  /* ---------- lesson ---------- */
+  .back { background:#fff; border:2px solid var(--line); color:var(--brand);
+          border-radius:999px; padding:7px 16px; cursor:pointer; margin-bottom:12px; font-weight:700; }
+  .back:hover { border-color:var(--brand); }
+  .lessonhead { display:flex; gap:12px; align-items:baseline; flex-wrap:wrap; margin-bottom:12px; }
   .lessonhead h1 { margin:0; }
+  .lessonmeta { color:var(--muted); font-size:.86rem; }
+  .recapbox { background:linear-gradient(90deg,#f3ecff,#fffdf7); border:2px dashed #d9c9ff;
+    border-radius:var(--radius); padding:10px 16px; margin-bottom:14px; font-size:.9rem; color:var(--ink); }
+  .recapbox b { color:var(--brand); }
+  #l-recap .back { font-size:.78rem; padding:3px 12px; margin:0 0 0 8px; }
+
   /* ---------- falling lane ---------- */
   .lane {
-    position:relative; height:300px; background:var(--panel);
-    border:1px solid #2e3548; border-radius:var(--radius); overflow:hidden; margin-bottom:8px;
+    position:relative; height:clamp(200px, 34vh, 300px); overflow:hidden; margin-bottom:10px;
+    background:linear-gradient(180deg,#f3edff 0%,#fdf6ff 70%,#efe3ff 100%);
+    border-radius:var(--radius); border:3px solid #e6d9ff;
   }
-  .lane .hitline { position:absolute; left:0; right:0; bottom:0; height:2px;
-    background:linear-gradient(90deg,transparent,var(--accent2),transparent); }
-  .block { position:absolute; border-radius:6px; display:flex; align-items:flex-end; justify-content:center;
-    font-size:.75rem; color:#10121a; font-weight:600; padding-bottom:2px; }
-  .block.chord { background:linear-gradient(#ffd977,#e8b53f); }
-  .block.pending { background:linear-gradient(#cfe0ff,#9dbdf5); }
-  .block.done-good { background:linear-gradient(#b7eeb7,#69c469); }
-  .block.done-ok { background:linear-gradient(#ffe4a3,#e5b84f); }
-  .block.missed { background:#4a4f5e; color:#9aa3b8; }
-  .block.bad-flash { background:var(--bad) !important; }
+  .lane .hitline { position:absolute; left:0; right:0; bottom:0; height:4px;
+    background:linear-gradient(90deg,var(--teal),var(--brand)); border-radius:99px; }
+  .block { position:absolute; border-radius:10px; display:flex; align-items:flex-end; justify-content:center;
+    font-size:.75rem; color:#fff; font-weight:800; padding-bottom:3px;
+    box-shadow:0 3px 10px rgba(130,23,255,.25); }
+  .block.pending { background:linear-gradient(180deg,#9d6bff,#8217ff); }
+  .block.chord { background:linear-gradient(180deg,#ffd166,#ff9f43); color:#7a4a00; }
+  .block.done-good { background:linear-gradient(180deg,#57dd8f,#2ba55c); }
+  .block.done-ok { background:linear-gradient(180deg,#ffd166,#ff9f43); color:#7a4a00; }
+  .block.missed { background:#c9c2d8; color:#fff; box-shadow:none; }
+  .block.bad-flash { background:var(--coral) !important; }
+
   /* ---------- piano ---------- */
   .kb { position:relative; height:170px; user-select:none; touch-action:none;
-        display:flex; border-radius:8px; overflow:hidden; }
-  .wk { flex:1; background:linear-gradient(#fff,#e8e8ee); border:1px solid #b9b9c4;
-        border-radius:0 0 6px 6px; position:relative; cursor:pointer; }
+        display:flex; background:#3b2d63; border-radius:14px; overflow:hidden;
+        box-shadow:0 6px 22px rgba(90,60,180,.28); }
+  .wk { flex:1; background:linear-gradient(#fff,#f0ecf6); margin:0 1px 1px 0;
+        border-radius:0 0 7px 7px; position:relative; cursor:pointer; }
   .wk .lbl,.bk .lbl { position:absolute; bottom:8px; left:0; right:0; text-align:center;
-        color:#666; font-size:.7rem; pointer-events:none; }
-  .bk .lbl { bottom:6px; color:#9a9aa6; font-size:.6rem; }
+        color:#a99cc4; font-size:.68rem; font-weight:700; pointer-events:none; }
+  .bk .lbl { bottom:6px; color:#c9bfe0; font-size:.58rem; }
   .bk { position:absolute; top:0; height:62%; z-index:2;
-        background:linear-gradient(#33343d,#101116); border:1px solid #000;
-        border-radius:0 0 5px 5px; cursor:pointer; }
-  .wk.down { background:linear-gradient(#d7e5ff,#b9d2ff); }
-  .bk.down { background:linear-gradient(#3a5a9a,#23375e); }
-  .wk.hl,.bk.hl { box-shadow:inset 0 0 0 2.5px var(--accent); }
-  .wk.hl { background:linear-gradient(#cfe2ff,#a9c6ff); }
-  .bk.hl { background:linear-gradient(#3d5f9e,#27406e); }
-  /* ---------- lesson controls ---------- */
-  .controls { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:10px 0; }
+        background:linear-gradient(#4a3a78,#241b42); border-radius:0 0 6px 6px; cursor:pointer; }
+  .wk.down { background:linear-gradient(#d9fbf2,#a8ecdF); }
+  .bk.down { background:linear-gradient(#00c8ab,#00917c); }
+  .wk.hl,.bk.hl { box-shadow:inset 0 0 0 3px var(--brand); }
+  .wk.hl { background:linear-gradient(#eee0ff,#d3b6ff); }
+  .bk.hl { background:linear-gradient(#8217ff,#5c0fd6); }
+
+  /* ---------- controls ---------- */
+  .controls { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:12px 0; }
   .controls button, .controls select {
-    background:var(--panel2); color:var(--ink); border:1px solid #2e3548;
-    border-radius:8px; padding:8px 14px; cursor:pointer; font-size:.9rem;
+    background:#fff; color:var(--ink); border:2px solid var(--line);
+    border-radius:999px; padding:9px 18px; cursor:pointer; font-size:.92rem; font-weight:700;
   }
-  .controls button:hover { border-color:var(--accent); }
-  .controls button.primary { border-color:var(--accent2); color:var(--accent2); }
-  .progressbar { flex:1; min-width:160px; height:8px; background:var(--panel2);
+  .controls button:hover { border-color:var(--brand); color:var(--brand); }
+  .controls button.primary { background:linear-gradient(90deg,var(--brand),#9d4dff); color:#fff; border-color:transparent;
+    box-shadow:0 4px 14px rgba(130,23,255,.35); }
+  .controls button.primary:hover { filter:brightness(1.06); color:#fff; }
+  .controls button:disabled { opacity:.5; cursor:not-allowed; }
+  .progressbar { flex:1; min-width:160px; height:12px; background:#e9e2f7;
     border-radius:99px; overflow:hidden; }
-  .progressbar i { display:block; height:100%; width:0; background:var(--accent2); transition:width .2s; }
+  .progressbar i { display:block; height:100%; width:0;
+    background:linear-gradient(90deg,var(--teal),var(--brand)); border-radius:99px; transition:width .2s; }
   .finishbox {
-    background:var(--panel); border:1px solid #2e3548; border-radius:var(--radius);
-    padding:22px; text-align:center; margin-top:14px;
+    background:linear-gradient(180deg,#fff,#f6efff); border:2px solid #e6d9ff; border-radius:var(--radius);
+    padding:26px; text-align:center; margin-top:14px; box-shadow:var(--shadow-lg);
   }
-  .finishbox .bigstars { font-size:2.2rem; letter-spacing:6px; color:#ffd166; }
-  .finishbox .stat { color:var(--muted); margin-top:4px; }
-  .finishbox .pass { color:var(--good); font-weight:600; margin-top:6px; }
-  .finishbox .fail { color:var(--warn,#ffcc66); font-weight:600; margin-top:6px; }
-  .finishbox button { margin-top:14px; }
+  .finishbox .bigstars { font-size:2.6rem; letter-spacing:8px; color:#f5a623; text-shadow:0 2px 0 #ffcf70; }
+  .finishbox .stat { color:var(--muted); margin-top:6px; }
+  .finishbox .pass { color:#2ba55c; font-weight:800; margin-top:8px; font-size:1.05rem; }
+  .finishbox .fail { color:#e28800; font-weight:800; margin-top:8px; }
   .hidden { display:none !important; }
-  .recapbox { background:var(--panel); border:1px dashed #2e3548; border-radius:var(--radius);
-    padding:10px 14px; margin-bottom:12px; font-size:.88rem; color:var(--muted); }
-  .recapbox b { color:var(--ink); }
-  /* ---- course map (winding path) ---- */
-  .cmap-band { margin-bottom:8px; }
-  .cmap-band-title { margin:14px 0 8px; }
-  .cmap-row { display:flex; flex-wrap:wrap; gap:6px; }
-  .cmap-row.reverse { flex-direction:row-reverse; }
-  .cmap-node { width:96px; text-align:center; cursor:pointer; padding:6px 2px;
-    border-radius:10px; transition:background .15s; }
-  .cmap-node:hover { background:var(--panel); }
-  .cmap-node.locked { opacity:.45; cursor:default; }
-  .cmap-node.locked:hover { background:none; }
-  .cmap-dot { width:44px; height:44px; margin:0 auto 4px; border-radius:50%;
-    display:flex; align-items:center; justify-content:center; font-weight:700;
-    background:linear-gradient(#2a3554,#1c2740); border:2px solid var(--soloist);
-    color:var(--ink); font-size:.95rem; }
-  .cmap-node.chordsc .cmap-dot { border-color:var(--chords); }
-  .cmap-node.leadc .cmap-dot { border-color:#c9a2ff; }
-  .cmap-label { font-size:.72rem; line-height:1.2; color:var(--ink); }
-  .cmap-meta { font-size:.62rem; color:var(--muted); }
-  .cmap-stars { font-size:.68rem; color:#ffd166; }
   .lessonmeta { color:var(--muted); font-size:.85rem; }
-  footer { text-align:center; color:var(--muted); font-size:.8rem; padding:30px 0 50px; }
+
+  /* ---------- course map (winding path) ---------- */
+  .cmap-band { position:relative; margin-bottom:6px; padding:12px 0 18px;
+    background:linear-gradient(180deg,rgba(130,23,255,.05),rgba(130,23,255,0)); border-radius:var(--radius); }
+  .cmap-band:nth-child(even) { background:linear-gradient(180deg,rgba(0,200,171,.05),rgba(0,200,171,0)); }
+  .cmap-band-title { margin:6px 0 10px; }
+  .cmap-row { display:flex; flex-wrap:wrap; gap:10px 14px; }
+  .cmap-row.reverse { flex-direction:row-reverse; }
+  .cmap-node { width:100px; text-align:center; cursor:pointer; padding:8px 4px 10px;
+    border-radius:14px; transition:transform .15s; }
+  .cmap-node:hover { transform:translateY(-3px) scale(1.03); }
+  .cmap-node.locked { opacity:.5; cursor:default; filter:saturate(.5); }
+  .cmap-node.locked:hover { transform:none; }
+  .cmap-dot { width:52px; height:52px; margin:0 auto 6px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center; font-weight:900; font-size:1.05rem;
+    background:linear-gradient(180deg,#9d4dff,var(--brand)); color:#fff;
+    border:3px solid #fff; box-shadow:0 4px 12px rgba(130,23,255,.35); }
+  .cmap-node.complete .cmap-dot { background:linear-gradient(180deg,#57dd8f,#2ba55c);
+    box-shadow:0 4px 12px rgba(43,165,92,.4); }
+  .cmap-node.chordsc .cmap-dot { background:linear-gradient(180deg,#ff77b8,var(--chords)); }
+  .cmap-node.leadc .cmap-dot { background:linear-gradient(180deg,#a55bff,var(--brand)); }
+  .cmap-label { font-size:.74rem; line-height:1.25; color:var(--ink); font-weight:700; }
+  .cmap-meta { font-size:.64rem; color:var(--muted); }
+  .cmap-stars { font-size:.7rem; color:#f5a623; }
+
+  footer { text-align:center; color:var(--muted); font-size:.82rem; padding:34px 0 50px; }
+  footer button { vertical-align:middle; }
+  code { background:#f0eafd; border-radius:6px; padding:1px 6px; font-size:.85em; color:var(--brand2); }
+
+  /* ---------- mobile: keyboard always visible, compact chrome ---------- */
+  .kb-sticky { position:sticky; bottom:0; z-index:9; margin:0 -16px; padding:8px 10px calc(10px + env(safe-area-inset-bottom,0px));
+    background:linear-gradient(180deg,rgba(250,247,240,0),var(--bg) 30%); }
+  @media (max-width:640px){
+    main { padding:14px 10px 70px; }
+    h1 { font-size:1.35rem; }
+    .lessonhead h1 { font-size:1.2rem; }
+    .controls button, .controls select { padding:8px 13px; font-size:.85rem; }
+    .cmap-node { width:78px; }
+    .recapbox { font-size:.8rem; padding:8px 12px; }
+  }
 </style>
 </head>
 <body>
@@ -149,7 +203,7 @@
     <button data-view="sheet">🎼 Sheet Music</button>
     <button data-view="free">Free Play</button>
   </nav>
-  <select id="locale" style="background:var(--panel2);color:var(--ink);border:1px solid #2e3548;border-radius:8px;padding:4px 8px;font-size:.8rem">
+  <select id="locale" style="margin-left:auto">
     <option value="en">EN</option><option value="ru">RU</option><option value="es">ES</option>
   </select>
 </header>
@@ -465,13 +519,14 @@ document.getElementById("locale").addEventListener("change",e=>{
 });
 
 let kbApi=null;
-function mountKB(lo,hi,onInput){
+function mountKBInto(container, lo, hi, onInput){
   if(kbApi&&kbApi.cleanup){ kbApi.cleanup(); }
   const kbEl=document.createElement("div"); kbEl.className="kb";
-  view.append(kbEl);
+  container.append(kbEl);
   buildKB(kbEl,lo,hi);
   kbApi=wireKB(kbEl,onInput);
   kbApi.setLo(()=>lo);
+  return kbEl;
 }
 
 /* ---------- HOME ---------- */
@@ -566,7 +621,7 @@ function profilesView(){
     const done=UNITS.filter(u=>cp[u.id]&&cp[u.id].complete).length;
     const card=document.createElement("div"); card.className="card";
     card.innerHTML=`<h3 style="font-size:1.8rem">${p.emoji}</h3>
-      <h3>${p.name}${p.id===profiles.activeId?' <span style="color:var(--accent2)">✓</span>':""}</h3>
+      <h3>${p.name}${p.id===profiles.activeId?' <span style="color:var(--teal)">✓</span>':""}</h3>
       <div class="meta">${done} units done</div>`;
     card.onclick=()=>{ switchPlayer(p.id); homeView(); };
     list.append(card);
@@ -696,7 +751,7 @@ function trainerPage(){
   document.getElementById("t-test30").onclick=()=>start({clef:"treble",testNotes:30,timeLimit:120});
   document.getElementById("t-test60").onclick=()=>start({clef:"treble",testNotes:60,timeLimit:180});
   // route keyboard/pointer input into the trainer (keyboard only — no lane here)
-  mountKB(48,84,(m,down)=>{ if(session) session.input(m,down); });
+  mountKBInto(view, 48, 84, (m,down)=>{ if(session) session.input(m,down); });
   start({clef:"treble"});
 }
 
@@ -714,7 +769,7 @@ function sheetView(){
   earned.sort((a,b)=>(songProg[b.id].stars)-(songProg[a.id].stars));
   earned.forEach(s=>{
     const wrap=document.createElement("div");
-    wrap.style.cssText="background:var(--panel);border:1px solid #2e3548;border-radius:12px;padding:14px;margin-bottom:12px";
+    wrap.style.cssText="background:#fff;border-radius:12px;padding:14px;margin-bottom:12px;box-shadow:var(--shadow)";
     wrap.innerHTML=`<h3 style="margin-bottom:2px">${s.title} <span class="cmap-stars">${starRow(songProg[s.id].stars)}</span></h3>
       <div class="meta" style="color:var(--muted);font-size:.75rem;margin-bottom:6px">${s.tempo} BPM · ${s.genre} · key of C major</div>`;
     // melody line rendered as staff blocks (bar-divided)
@@ -729,7 +784,7 @@ function freeView(){
   setView("free"); stopMetro(); clearHl();
   view.innerHTML=`<h1>Free Play</h1>
     <p class="sub">Two octaves · pointer with glissando · computer keys A W S E D F T G Y H U J K …</p>`;
-  mountKB(48,72,null);
+  mountKBInto(view, 48, 72, null);
 }
 
 /* ---------- LESSON (the engine) ---------- */
@@ -803,12 +858,35 @@ function lessonView(unitId, opts){
   let beat=0;
   const layout=song.steps.map(st=>{ const s={...st,startBeat:beat}; beat+=st.beats; return s; });
   const totalBeats=beat;
-  const kbTop=()=>lane.clientHeight; // px of hit line
   const notes=layout.filter(s=>!s.rest);
   notes.forEach((s,i)=>s.idx=i);
+  const kbTop=()=>lane.clientHeight; // px of hit line
+  // ---- keyboard range derived from the ACTUAL notes in the song (chord
+  // tops included — stored lo/hi under-report for chords). Cap the span at
+  // ~2 octaves so keys stay tappable on phones; >=8 whites minimum. ----
+  let loN=Infinity, hiN=-Infinity;
+  layout.forEach(s=>{ if(s.rest) return;
+    (Array.isArray(s.midi)?s.midi:[s.midi]).forEach(m=>{ if(m<loN)loN=m; if(m>hiN)hiN=m; }); });
+  let kbLo=48, kbHi=84;
+  if(isFinite(loN)){
+    kbLo=loN-2; while(!WHITE(kbLo)) kbLo--;
+    kbHi=hiN+2; while(!WHITE(kbHi)) kbHi++;
+    const whites=(a,b)=>{let n=0;for(let m=a;m<=b;m++) if(WHITE(m)) n++; return n;};
+    while(whites(kbLo,kbHi)<8){ kbLo--; while(!WHITE(kbLo)) kbLo--; }
+    // cap span: if more than 15 whites, trim from the side with more slack
+    while(whites(kbLo,kbHi)>15){
+      if(kbLo>21 && kbLo<loN-4) { kbLo++; while(!WHITE(kbLo)) kbLo++; }
+      else if(kbHi<108 && kbHi>hiN+4){ kbHi--; while(!WHITE(kbHi)) kbHi--; }
+      else break;
+    }
+    if(kbLo<21) kbLo=21;
+  }
   L={ unitId, song, mode, layout, totalBeats, notes, cursor:0, mistake:false,
       good:0, ok:0, missed:0, running:false, startT:0, playhead:0, raf:null, listenTimers:[] };
-  mountKB(48,84,onInput);
+  // sticky keyboard wrapper: the keys stay visible while the lane scrolls
+  const kbSticky=document.createElement("div"); kbSticky.className="kb-sticky";
+  view.append(kbSticky);
+  mountKBInto(kbSticky, kbLo, kbHi, onInput);
   window.Hands.mount(view.querySelector(".kb"));
 
   // mic input: always share the app's AudioContext so the virtual-mic stream and
@@ -1020,7 +1098,7 @@ function lessonView(unitId, opts){
         }
       } else { // wrong chord member
         L.mistake=true; L.remaining=null; L.remainingDeadline=0;
-        const el=keyEl(m); if(el){ el.style.outline="2px solid var(--bad)"; setTimeout(()=>el.style.outline="",160); }
+        const el=keyEl(m); if(el){ el.style.outline="3px solid #ff7a7a"; setTimeout(()=>el.style.outline="",160); }
       }
       return;
     }
@@ -1037,7 +1115,7 @@ function lessonView(unitId, opts){
         if(L.cursor>=L.notes.length) finish(); else highlightNext();
       } else {
         L.mistake=true;
-        const el=keyEl(m); if(el){ el.style.outline="2px solid var(--bad)"; setTimeout(()=>el.style.outline="",160); }
+        const el=keyEl(m); if(el){ el.style.outline="3px solid #ff7a7a"; setTimeout(()=>el.style.outline="",160); }
       }
     } else { // moving: within ±0.4 beats of the note's start
       const msPerBeat=60000/song.tempo;

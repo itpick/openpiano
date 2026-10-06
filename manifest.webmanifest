@@ -4,14 +4,15 @@
   "description": "An open, offline-first piano-learning app: courses, songs, mic grading.",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#12141a",
-  "theme_color": "#12141a",
+  "background_color": "#faf7f0",
+  "theme_color": "#8217ff",
   "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
     {
-      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='96' fill='%231b1f2a'/%3E%3Ctext x='256' y='340' font-size='280' text-anchor='middle'%3E%F0%9F%8E%B9%3C/text%3E%3C/svg%3E",
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='96' fill='%238217ff'/%3E%3Crect x='76' y='200' width='360' height='240' rx='12' fill='%23fff'/%3E%3Crect x='116' y='200' width='40' height='150' fill='%232b2344'/%3E%3Crect x='180' y='200' width='40' height='150' fill='%232b2344'/%3E%3Crect x='308' y='200' width='40' height='150' fill='%232b2344'/%3E%3Crect x='372' y='200' width='40' height='150' fill='%232b2344'/%3E%3Ccircle cx='256' cy='118' r='36' fill='%2300c8ab'/%3E%3C/svg%3E",
       "sizes": "512x512",
       "type": "image/svg+xml",
-      "purpose": "any"
+      "purpose": "any maskable"
     }
   ]
 }

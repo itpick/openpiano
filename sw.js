@@ -8,10 +8,12 @@ const SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
+  "./icon.svg",
   "./app/data.js",
   "./app/mic.js",
   "./app/render.js",
-  "./app/midi.js"
+  "./app/midi.js",
+  "./app/sampler.js"
 ];
 
 self.addEventListener("install", (e) => {

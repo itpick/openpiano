@@ -169,4 +169,27 @@
     return actx;
   }
   window.Mic = { start, stop, info, isEcho, stampEcho, useContext:(c)=>{ actx=c; } };
+
+  /* ---- polyphonic chord detection (MusicSense-lite) ----
+   * For chord songs: instead of ACF (monophonic), correlate the buffer
+   * against each expected chord tone and confirm when ALL of them show a
+   * strong peak within the same window. Returns matched midis. */
+  function detectChord(buf, sampleRate, candidateMidis){
+    const matched=[];
+    candidateMidis.forEach(m=>{
+      const f=440*Math.pow(2,(m-69)/12);
+      const period=Math.round(sampleRate/f);
+      if(period<2 || period>buf.length/2) return;
+      let sum=0,n=0;
+      for(let i=0;i<buf.length-period-1;i+=2){ sum+=buf[i]*buf[i+period]; n++; }
+      const corr=sum/(n||1);
+      // rms for normalization
+      let rms=0; for(let i=0;i<buf.length;i+=2) rms+=buf[i]*buf[i];
+      rms=Math.sqrt(rms/(buf.length/2));
+      const norm=corr/(rms*rms+1e-9);
+      if(norm>0.5 && rms>0.004) matched.push({midi:m, strength:norm});
+    });
+    return matched;
+  }
+  window.Mic.detectChord = detectChord;
 })();

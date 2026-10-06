@@ -58,8 +58,8 @@ test.describe("full-content sweep via microphone", () => {
       await card.locator("button[data-mode=step]").click();
       await page.locator("#l-start").click();  // start first, then play
       if (chordSong) {
-        // mic is monophonic — chord songs grade by tapping the on-screen keys
-        await expect(page.locator("#l-mic")).toBeDisabled();
+        // chord songs support BOTH tap and mic (MusicSense-lite correlation);
+        // this test drives them by tapping the on-screen keys
         for (const step of song.steps.filter(s => !s.rest)) {
           const midis = Array.isArray(step.midi) ? step.midi : [step.midi];
           // sequential clicks (concurrent clicks race in Playwright); the

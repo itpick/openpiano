@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>OpenPiano — learn piano, open source</title>
 <meta name="description" content="OpenPiano: an open, offline-first piano-learning app prototype. Courses, songs, lessons, falling-notes engine, Web Audio synth, mic grading (roadmap).">
 <meta name="theme-color" content="#12141a">
@@ -34,24 +34,32 @@
     position:sticky; top:0; z-index:10;
     background:linear-gradient(90deg,var(--brand),#9d4dff);
     box-shadow:0 2px 14px rgba(130,23,255,.28);
-    padding:10px 16px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+    padding:calc(4px + env(safe-area-inset-top,0px)) 14px calc(4px + env(safe-area-inset-bottom,0px));
+    padding-left:max(14px, env(safe-area-inset-left,0px));
+    padding-right:max(14px, env(safe-area-inset-right,0px));
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
   }
-  header.app .logo { font-weight:900; font-size:1.15rem; color:#fff; letter-spacing:.01em; }
+  header.app .logo { font-weight:900; font-size:1.05rem; color:#fff; letter-spacing:.01em; }
   header.app .logo span { background:rgba(255,255,255,.22); border-radius:8px; padding:1px 8px; margin-left:6px; font-size:.62rem; font-weight:800; letter-spacing:.08em; vertical-align:middle; }
-  header.app nav { display:flex; gap:4px; flex-wrap:wrap; }
+  header.app nav { display:flex; gap:2px; flex-wrap:wrap; }
   header.app nav button {
     background:none; border:none; color:#e8dcff;
-    border-radius:999px; padding:7px 14px; cursor:pointer; font-weight:700;
+    border-radius:999px; padding:5px 11px; cursor:pointer; font-weight:700; font-size:.9rem;
   }
   header.app nav button:hover { background:rgba(255,255,255,.14); color:#fff; }
   header.app nav button.active { background:#fff; color:var(--brand); box-shadow:0 2px 8px rgba(0,0,0,.18); }
   header.app select {
     background:rgba(255,255,255,.16); color:#fff; border:1px solid rgba(255,255,255,.35);
-    border-radius:8px; padding:4px 8px; font-size:.8rem;
+    border-radius:8px; padding:3px 6px; font-size:.78rem;
   }
   header.app select option { color:var(--ink); }
+  #fs-btn { background:rgba(255,255,255,.16); color:#fff; border:none; border-radius:8px;
+    padding:5px 9px; cursor:pointer; font-size:.95rem; line-height:1; }
+  #fs-btn:hover { background:rgba(255,255,255,.28); }
 
-  main { max-width:var(--max); margin:0 auto; padding:22px 16px 90px; }
+  main { max-width:var(--max); margin:0 auto; padding:22px 16px 90px;
+    padding-left:max(16px, env(safe-area-inset-left,0px));
+    padding-right:max(16px, env(safe-area-inset-right,0px)); }
   h1 { font-size:1.7rem; margin:10px 0 2px; }
   .sub { color:var(--muted); margin-bottom:18px; font-size:.97rem; }
 
@@ -209,6 +217,28 @@
     .cmap-node { width:78px; }
     .recapbox { font-size:.8rem; padding:8px 12px; }
   }
+
+  /* ---------- landscape / PWA: maximize learning content ---------- */
+  @media (orientation:landscape){
+    header.app { padding-top:calc(4px + env(safe-area-inset-top,0px));
+      padding-bottom:calc(4px + env(safe-area-inset-bottom,0px)); }
+    header.app .logo { font-size:.95rem; }
+    header.app nav button { padding:5px 10px; font-size:.82rem; }
+    .lane { height:clamp(200px, 44vh, 400px); }
+  }
+  /* focus mode (⛶): chrome hidden, the lesson IS the screen */
+  body.focus { overflow:hidden; }
+  body.focus header.app, body.focus footer { display:none !important; }
+  body.focus main { padding:6px max(10px, env(safe-area-inset-left,0px)) 4px;
+    max-width:none; height:100dvh; display:flex; flex-direction:column; }
+  body.focus .lane { flex:none; height:clamp(120px, calc(100vh - 190px), 60vh) !important; min-height:110px; max-height:none; }
+  body.focus .lessonhead h1 { font-size:1.05rem; }
+  body.focus .recapbox { display:none; }  /* maximal content: recap hidden in focus */
+  body.focus .controls { margin:6px 0; flex-wrap:nowrap; }
+  body.focus .controls button, body.focus .controls select { padding:5px 10px; font-size:.78rem; }
+  body.focus .controls .progressbar { min-width:80px; height:9px; }
+  body.focus .kb-sticky { margin:0; }
+  body.focus .kb { height:clamp(110px, 32vh, 170px); }
 </style>
 </head>
 <body>
@@ -223,9 +253,10 @@
     <button data-view="sheet">🎼 Sheet Music</button>
     <button data-view="free">Free Play</button>
   </nav>
-  <select id="locale" style="margin-left:auto">
+  <select id="locale" style="margin-left:auto" aria-label="Language">
     <option value="en">EN</option><option value="ru">RU</option><option value="es">ES</option>
   </select>
+  <button id="fs-btn" title="Focus mode — hide menu for more lesson space" aria-label="Focus mode">⛶</button>
 </header>
 
 <main id="view"></main>
@@ -659,6 +690,17 @@ document.querySelectorAll("header.app nav button").forEach(b=>
 document.getElementById("locale").value=(window.I18N&&window.I18N.locale)||"en";
 document.getElementById("locale").addEventListener("change",e=>{
   window.I18N.setLocale(e.target.value); VIEWS[document.querySelector("header.app nav button.active").dataset.view]();
+});
+/* focus mode (⛶): hide header/footer for maximum lesson space; Esc exits */
+const fsBtn=document.getElementById("fs-btn");
+fsBtn.onclick=()=>{
+  document.body.classList.toggle("focus");
+  fsBtn.textContent=document.body.classList.contains("focus")?"⛶✕":"⛶";
+};
+window.addEventListener("keydown",e=>{
+  if(e.key==="Escape" && document.body.classList.contains("focus")){
+    document.body.classList.remove("focus"); fsBtn.textContent="⛶";
+  }
 });
 
 let kbApi=null;

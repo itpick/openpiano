@@ -359,9 +359,8 @@ function synthNote(midi, durBeats=1, bpm=90){
   o1.stop(t+secs+0.4); o2.stop(t+secs+0.4);
 }
 /* ---- backing track: simple bass accompaniment under the melody ----
- * Patterns ("c-g" = alternate C-root / G-root bars) evoke the play-along
- * backing that makes Simply Piano's lessons feel like music, not a metronome.
- * Scheduled on the AudioContext clock like the metronome clicks. */
+ * Superseded by THE BAND (auto-harmonized full arrangement) above; kept
+ * name-compatible for the moving-mode call site. */
 function backingChordBar(pattern, bar, t, barSecs){
   const roots={ "c-g":[ [48,55,64], [43,55,62] ],  // C: C3 G3 E4 / G: G2 G3 D4
                 "c-am-f-g":[ [48,55,64],[45,52,60],[41,53,60],[43,55,62] ] };
@@ -381,6 +380,113 @@ function playBacking(pattern, bpm, totalBeats, countIn){
   const t0=actx.currentTime + countIn*(60/bpm);
   const bars=Math.ceil(totalBeats/barBeats);
   for(let b=0;b<bars;b++) backingChordBar(pattern, b, t0+b*barSecs, barSecs);
+}
+
+/* ---- THE BAND: auto-harmonized backing track (the Simply Piano layer) ----
+ * Simply never makes you play over a bare metronome: every play-along runs
+ * over bass + chords + drums. We derive the chord progression from the
+ * song's own melody per bar (auto-harmonization), then schedule a full
+ * arrangement on the AudioContext clock.
+ *   - moving mode: full band synced to the count-in
+ *   - step mode:   the band ANSWERS each correct note with a stab
+ *   - everything routes through bandBus() so finish()/exit can duck it out */
+let bandGain=null, bandNodes=[], noiseBuffer=null;
+function bandBus(){
+  if(!bandGain){ bandGain=actx.createGain(); bandGain.gain.value=0.9; bandGain.connect(master); }
+  return bandGain;
+}
+function stopBand(){
+  if(bandGain){ const g=bandGain; bandGain=null;
+    g.gain.setTargetAtTime(0.0001, actx.currentTime, 0.04);
+    setTimeout(()=>{ try{g.disconnect();}catch(e){} },400); }
+  bandNodes.forEach(n=>{ try{n.stop();}catch(e){} }); bandNodes=[];
+}
+function getNoise(){
+  if(!noiseBuffer){
+    noiseBuffer=actx.createBuffer(1, actx.sampleRate*0.25, actx.sampleRate);
+    const d=noiseBuffer.getChannelData(0);
+    for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+  }
+  return noiseBuffer;
+}
+function drumKick(t){
+  const g=bandBus(), o=actx.createOscillator(), env=actx.createGain();
+  o.type="sine"; o.frequency.setValueAtTime(150,t); o.frequency.exponentialRampToValueAtTime(48,t+0.09);
+  env.gain.setValueAtTime(0.42,t); env.gain.exponentialRampToValueAtTime(0.0001,t+0.12);
+  o.connect(env); env.connect(g); o.start(t); o.stop(t+0.14);
+}
+function drumSnare(t){
+  const g=bandBus(), s=actx.createBufferSource(), f=actx.createBiquadFilter(), env=actx.createGain();
+  s.buffer=getNoise(); f.type="highpass"; f.frequency.value=1800;
+  env.gain.setValueAtTime(0.16,t); env.gain.exponentialRampToValueAtTime(0.0001,t+0.09);
+  s.connect(f); f.connect(env); env.connect(g); s.start(t); s.stop(t+0.1);
+}
+function drumHat(t, vol=0.06){
+  const g=bandBus(), s=actx.createBufferSource(), f=actx.createBiquadFilter(), env=actx.createGain();
+  s.buffer=getNoise(); f.type="highpass"; f.frequency.value=8000;
+  env.gain.setValueAtTime(vol,t); env.gain.exponentialRampToValueAtTime(0.0001,t+0.03);
+  s.connect(f); f.connect(env); env.connect(g); s.start(t); s.stop(t+0.04);
+}
+function bandNote(midi, t, durSecs, vol, type="sine"){
+  const g=bandBus(), o=actx.createOscillator(), env=actx.createGain();
+  o.type=type; o.frequency.value=midiFreq(midi);
+  env.gain.setValueAtTime(0.0001,t);
+  env.gain.exponentialRampToValueAtTime(vol,t+0.02);
+  env.gain.exponentialRampToValueAtTime(0.0001,t+durSecs);
+  o.connect(env); env.connect(g); o.start(t); o.stop(t+durSecs+0.05);
+  bandNodes.push(o);
+}
+/* auto-harmonize: best diatonic triad per 4-beat bar (downbeat weighted).
+ * Candidates ordered I, V, IV, vi, ii, iii — ties prefer the more common
+ * progression degree, which keeps simple tunes sounding right. */
+const CHORDS=[ {pc:0,int:[0,4,7],min:false},{pc:7,int:[0,4,7],min:false},
+  {pc:5,int:[0,4,7],min:false},{pc:9,int:[0,3,7],min:true},
+  {pc:2,int:[0,3,7],min:true},{pc:4,int:[0,3,7],min:true} ];
+function harmonize(layout,totalBeats){
+  const bars=Math.max(1,Math.ceil(totalBeats/4));
+  const out=[];
+  for(let b=0;b<bars;b++){
+    const lo=b*4, hi=lo+4, pcs=[];
+    layout.forEach(s=>{ if(s.rest) return;
+      if(s.startBeat>=lo && s.startBeat<hi){
+        (Array.isArray(s.midi)?s.midi:[s.midi]).forEach(m=>{
+          const w = s.startBeat===lo ? 2 : 1;      // downbeat weighs double
+          for(let k=0;k<w;k++) pcs.push(((m%12)+12)%12);
+        });
+      }
+    });
+    let best=CHORDS[0], bestScore=-Infinity;
+    CHORDS.forEach(c=>{
+      const triad=new Set(c.int.map(i=>(c.pc+i)%12));
+      let score=0; pcs.forEach(p=>{ score += triad.has(p)?1:-0.5; });
+      if(score>bestScore){ bestScore=score; best=c; }
+    });
+    out.push({ rootPc:best.pc, triad:best.int.map(i=>(best.pc+i)%12),
+               minor:best.min, startBeat:lo });
+  }
+  return out;
+}
+/* one-shot stab (step mode): the band answers each correct note */
+function bandStab(bar, bpm){
+  const t=actx.currentTime+0.01, c=bar;
+  const bassRoot=36+c.rootPc;
+  bandNote(bassRoot, t, 0.5, 0.15, "sine");
+  c.triad.forEach((pc,i)=> bandNote(60+pc, t+0.015*i, 0.55, 0.045, "triangle"));
+  drumHat(t, 0.05);
+}
+/* full arrangement (moving mode): bass, pad, drums per bar */
+function playFullBacking(bars, bpm, countIn){
+  const spb=60/bpm, barSecs=4*spb;
+  const t0=actx.currentTime + countIn*spb;
+  bars.forEach((c,bi)=>{
+    const t=t0+bi*barSecs;
+    drumKick(t); drumKick(t+2*spb);
+    drumSnare(t+1*spb); drumSnare(t+3*spb);
+    for(let hb=0;hb<4;hb++) drumHat(t+hb*spb, 0.045);
+    bandNote(36+c.rootPc, t, spb*1.8, 0.16, "sine");                 // bass root
+    bandNote(36+((c.rootPc+7)%12), t+2*spb, spb*1.8, 0.13, "sine");  // fifth
+    c.triad.forEach(pc=> bandNote(48+pc, t, barSecs*0.95, 0.035, "triangle")); // pad
+  });
 }
 
 let metroTimer=null, metroStartT=0;
@@ -832,7 +938,7 @@ function lessonView(unitId, opts){
       <span class="lessonmeta" id="l-status"></span>
     </div>
     <div id="l-finish"></div>`;
-  view.querySelector(".back").onclick=()=>{ stopMic(); stopMetro(); u?courseView():(opts&&opts.fromSongs?songsView():homeView()); };
+  view.querySelector(".back").onclick=()=>{ stopMic(); stopMetro(); stopBand(); u?courseView():(opts&&opts.fromSongs?songsView():homeView()); };
 
   // ---- recap: review the previous unit (Simply's lesson-recap pattern) ----
   if(u){
@@ -882,7 +988,8 @@ function lessonView(unitId, opts){
     if(kbLo<21) kbLo=21;
   }
   L={ unitId, song, mode, layout, totalBeats, notes, cursor:0, mistake:false,
-      good:0, ok:0, missed:0, running:false, startT:0, playhead:0, raf:null, listenTimers:[] };
+      good:0, ok:0, missed:0, running:false, startT:0, playhead:0, raf:null, listenTimers:[],
+      bars:harmonize(layout,totalBeats) };  // band chords precomputed per bar
   // sticky keyboard wrapper: the keys stay visible while the lane scrolls
   const kbSticky=document.createElement("div"); kbSticky.className="kb-sticky";
   view.append(kbSticky);
@@ -1018,10 +1125,10 @@ function lessonView(unitId, opts){
       const countBeats=4;
       view.querySelector("#l-status").textContent="count-in…";
       metronome(song.tempo, countBeats+L.totalBeats, null, ()=>{ /* done */ });
-      // backing track: bass chords under the melody (the "play along with a
-      // band" layer that makes Simply's lessons feel like music)
-      const pattern=(DATA.backings||{})[song.id];
-      if(pattern) playBacking(pattern, song.tempo, L.totalBeats, countBeats);
+      // THE BAND: auto-harmonized full arrangement (bass, chords, drums) —
+      // Simply never makes you play over a bare metronome
+      L.bars=harmonize(layout,totalBeats);
+      playFullBacking(L.bars, song.tempo, countBeats);
       // playhead 0 = first note's startBeat; count-in keeps it negative until beat 0.
       // Clock = the AudioContext-scheduled metronome start (drift-free).
       L.countIn=countBeats;
@@ -1044,7 +1151,7 @@ function lessonView(unitId, opts){
 
   function finish(){
     try{
-      L.running=false; cancelAnimationFrame(L.raf); stopMetro(); stopMic(); clearHl();
+      L.running=false; cancelAnimationFrame(L.raf); stopMetro(); stopMic(); stopBand(); clearHl();
       if(L.practiceStart) logPractice((performance.now()-L.practiceStart)/1000);
       const total=L.notes.length;
       const attempted=L.good+L.ok;
@@ -1094,6 +1201,9 @@ function lessonView(unitId, opts){
           if(!L.mistake) L.good++; else L.ok++;
           L.mistake=false;
           updateStatus();
+          // the band answers: stab on the chord that was just played
+          if(L.bars){ const bi=Math.min(Math.floor((cur.startBeat||0)/4), L.bars.length-1);
+            if(L.bars[bi]) bandStab(L.bars[bi], song.tempo); }
           if(L.cursor>=L.notes.length) finish(); else highlightNext();
         }
       } else { // wrong chord member
@@ -1112,6 +1222,10 @@ function lessonView(unitId, opts){
         if(!L.mistake) L.good++; else L.ok++;
         L.mistake=false; L.cursor++;
         updateStatus();
+        // the band answers every correct note: chord stab + hat (Simply's
+        // play-along feel in the patient mode where beginners live)
+        if(L.bars){ const bi=Math.min(Math.floor((cur.startBeat||0)/4), L.bars.length-1);
+          if(L.bars[bi]) bandStab(L.bars[bi], song.tempo); }
         if(L.cursor>=L.notes.length) finish(); else highlightNext();
       } else {
         L.mistake=true;

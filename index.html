@@ -229,6 +229,13 @@
   /* focus mode (⛶): chrome hidden, the lesson IS the screen */
   body.focus { overflow:hidden; }
   body.focus header.app, body.focus footer { display:none !important; }
+  /* the logo becomes the home button in focus mode */
+  body.focus #focus-exit { display:flex; }
+  #focus-exit { display:none; position:fixed; top:calc(6px + env(safe-area-inset-top,0px));
+    left:max(8px, env(safe-area-inset-left,0px)); z-index:20;
+    align-items:center; gap:6px; background:rgba(130,23,255,.85); color:#fff;
+    border:none; border-radius:999px; padding:6px 14px; cursor:pointer;
+    font-weight:800; font-size:.85rem; box-shadow:0 2px 10px rgba(0,0,0,.3); }
   body.focus main { padding:6px max(10px, env(safe-area-inset-left,0px)) 4px;
     max-width:none; height:100dvh; display:flex; flex-direction:column; }
   body.focus .lane { flex:none; height:clamp(120px, calc(100vh - 190px), 60vh) !important; min-height:110px; max-height:none; }
@@ -242,6 +249,7 @@
 </style>
 </head>
 <body>
+<button id="focus-exit" aria-label="Exit focus mode — back to menu">🎹 Menu</button>
 
 <header class="app">
   <span class="logo">🎹 OpenPiano</span>
@@ -691,16 +699,17 @@ document.getElementById("locale").value=(window.I18N&&window.I18N.locale)||"en";
 document.getElementById("locale").addEventListener("change",e=>{
   window.I18N.setLocale(e.target.value); VIEWS[document.querySelector("header.app nav button.active").dataset.view]();
 });
-/* focus mode (⛶): hide header/footer for maximum lesson space; Esc exits */
+/* focus mode (⛶): hide header/footer for maximum lesson space; Esc or the
+   floating 🎹 Menu button exits */
 const fsBtn=document.getElementById("fs-btn");
+function exitFocus(){ document.body.classList.remove("focus"); fsBtn.textContent="⛶"; }
 fsBtn.onclick=()=>{
   document.body.classList.toggle("focus");
   fsBtn.textContent=document.body.classList.contains("focus")?"⛶✕":"⛶";
 };
+document.getElementById("focus-exit").onclick=exitFocus;
 window.addEventListener("keydown",e=>{
-  if(e.key==="Escape" && document.body.classList.contains("focus")){
-    document.body.classList.remove("focus"); fsBtn.textContent="⛶";
-  }
+  if(e.key==="Escape" && document.body.classList.contains("focus")) exitFocus();
 });
 
 let kbApi=null;
